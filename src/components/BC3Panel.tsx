@@ -18,7 +18,6 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const [addingItem, setAddingItem] = useState<BC3Item | null>(null);
-  const [addingMeta, setAddingMeta] = useState<{ catCode: string; catName: string; subCode: string; subName: string } | null>(null);
   const [cantidad, setCantidad] = useState('1');
 
   const filteredData = useMemo(() => {
@@ -59,7 +58,6 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
     if (addingItem) {
       onAddItem(addingItem, parseFloat(cantidad) || 1);
       setAddingItem(null);
-      setAddingMeta(null);
       setCantidad('1');
     }
   };
@@ -81,9 +79,8 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
     e.dataTransfer.effectAllowed = 'copy';
   };
 
-  const startAdding = (item: BC3Item, catCode: string, catName: string, subCode: string, subName: string) => {
+  const startAdding = (item: BC3Item) => {
     setAddingItem(item);
-    setAddingMeta({ catCode, catName, subCode, subName });
   };
 
   if (!isOpen) {
@@ -172,7 +169,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
                         draggable
                         onDragStart={e => handleDragStart(e, item, cat.codigo, cat.nombre, sub.codigo, sub.nombre)}
                         className="flex items-start gap-1.5 px-2 py-1.5 rounded-md hover:bg-cyan-500/8 cursor-grab active:cursor-grabbing group/item transition-colors"
-                        onClick={() => startAdding(item, cat.codigo, cat.nombre, sub.codigo, sub.nombre)}
+                        onClick={() => startAdding(item)}
                       >
                         <GripVertical size={10} className="text-slate-700 mt-1 shrink-0 opacity-0 group-hover/item:opacity-100" />
                         <div className="flex-1 min-w-0">
@@ -189,7 +186,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
                         </div>
                         <button
                           className="opacity-0 group-hover/item:opacity-100 p-1 rounded-md bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 transition-all shrink-0 mt-0.5"
-                          onClick={e => { e.stopPropagation(); startAdding(item, cat.codigo, cat.nombre, sub.codigo, sub.nombre); }}
+                          onClick={e => { e.stopPropagation(); startAdding(item); }}
                         >
                           <Plus size={10} />
                         </button>

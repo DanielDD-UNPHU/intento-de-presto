@@ -707,7 +707,7 @@ export function usePresupuesto() {
   return {
     conceptos, rootIds,
     selectedIds, setSelectedIds,
-    expandedIds, toggleExpanded, expandTo,
+    expandedIds, toggleExpanded,
     componentSources, pendingPropagation, setPendingPropagation,
     dropTargetId, setDropTargetId,
     getVisibleIds,
