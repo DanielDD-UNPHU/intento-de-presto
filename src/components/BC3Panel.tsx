@@ -320,59 +320,6 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
                       </div>
                     ))}
 
-                    {/* Inline create form */}
-                    {creatingIn?.subCode === sub.codigo && (
-                      <div className="mt-1 p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <Plus size={10} className="text-emerald-400 shrink-0" />
-                          <span className="text-[9px] text-emerald-400 font-bold uppercase">Nuevo item en {sub.codigo}</span>
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="Descripcion..."
-                          value={newItemDesc}
-                          onChange={e => setNewItemDesc(e.target.value)}
-                          className="w-full px-2 py-1.5 mb-1.5 text-[10px] rounded bg-slate-900 text-slate-200 border border-slate-700 focus:outline-none focus:border-emerald-500/50 placeholder-slate-600"
-                          autoFocus
-                          onKeyDown={e => { if (e.key === 'Enter' && newItemDesc.trim()) handleCreateCustom(); if (e.key === 'Escape') setCreatingIn(null); }}
-                        />
-                        <div className="flex gap-1.5 mb-2">
-                          <select
-                            value={newItemUnidad}
-                            onChange={e => setNewItemUnidad(e.target.value)}
-                            className="w-1/2 px-1.5 py-1.5 text-[10px] rounded bg-slate-900 text-slate-200 border border-slate-700 focus:outline-none focus:border-emerald-500/50 appearance-none cursor-pointer"
-                          >
-                            <option value="">Unidad...</option>
-                            {UNIDADES.map(u => (
-                              <option key={u.value} value={u.value}>{u.value}</option>
-                            ))}
-                          </select>
-                          <input
-                            type="text"
-                            placeholder="Precio RD$"
-                            value={newItemPrecio}
-                            onChange={e => setNewItemPrecio(e.target.value)}
-                            className="w-1/2 px-2 py-1.5 text-[10px] rounded bg-slate-900 text-slate-200 border border-slate-700 focus:outline-none focus:border-emerald-500/50 placeholder-slate-600 font-mono-num text-right"
-                            onKeyDown={e => { if (e.key === 'Enter' && newItemDesc.trim()) handleCreateCustom(); }}
-                          />
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={handleCreateCustom}
-                            disabled={!newItemDesc.trim()}
-                            className="flex-1 px-2 py-1.5 text-[10px] font-semibold bg-emerald-500 text-white rounded hover:bg-emerald-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            Crear item
-                          </button>
-                          <button
-                            onClick={() => { setCreatingIn(null); setNewItemDesc(''); setNewItemUnidad(''); setNewItemPrecio(''); }}
-                            className="p-1.5 text-slate-500 hover:text-slate-300 rounded hover:bg-white/5"
-                          >
-                            <X size={11} />
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
@@ -442,6 +389,113 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
           Precios de Referencia — Rep. Dominicana
         </div>
       </div>
+
+      {/* Modal: Crear item custom */}
+      {creatingIn && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => { setCreatingIn(null); setNewItemDesc(''); setNewItemUnidad(''); setNewItemPrecio(''); }} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-[380px] overflow-hidden">
+            {/* Header */}
+            <div className="px-5 pt-5 pb-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                    <Plus size={18} className="text-emerald-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-900">Nuevo item</h2>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      En <span className="font-semibold text-slate-700 font-mono-num">{creatingIn.subCode}</span> {creatingIn.subName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setCreatingIn(null); setNewItemDesc(''); setNewItemUnidad(''); setNewItemPrecio(''); }}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="px-5 pb-5 space-y-3">
+              {/* Código preview */}
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+                <span className="text-[10px] text-slate-400 font-medium">Codigo</span>
+                <span className="text-[12px] font-mono-num font-bold text-emerald-600">
+                  {(() => {
+                    const baseSub = mockBC3.categories.flatMap(c => c.children).find(s => s.codigo === creatingIn.subCode);
+                    const allItems = [...(baseSub?.items ?? []), ...(customItems[creatingIn.subCode] ?? [])];
+                    return generateNextCode(creatingIn.subCode, allItems);
+                  })()}
+                </span>
+                <span className="ml-auto text-[8px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-600 font-bold">AUTO</span>
+              </div>
+
+              {/* Descripción */}
+              <div>
+                <label className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1 block">Descripcion</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Cemento Portland tipo II..."
+                  value={newItemDesc}
+                  onChange={e => setNewItemDesc(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm rounded-lg bg-white text-slate-800 border border-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder-slate-400"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter' && newItemDesc.trim()) handleCreateCustom(); if (e.key === 'Escape') { setCreatingIn(null); setNewItemDesc(''); setNewItemUnidad(''); setNewItemPrecio(''); } }}
+                />
+              </div>
+
+              {/* Unidad + Precio */}
+              <div className="flex gap-3">
+                <div className="w-1/2">
+                  <label className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1 block">Unidad</label>
+                  <select
+                    value={newItemUnidad}
+                    onChange={e => setNewItemUnidad(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm rounded-lg bg-white text-slate-800 border border-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
+                  >
+                    <option value="">Seleccionar...</option>
+                    {UNIDADES.map(u => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-1/2">
+                  <label className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider mb-1 block">Precio RD$</label>
+                  <input
+                    type="text"
+                    placeholder="0.00"
+                    value={newItemPrecio}
+                    onChange={e => setNewItemPrecio(e.target.value)}
+                    className="w-full px-3 py-2.5 text-sm rounded-lg bg-white text-slate-800 border border-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 placeholder-slate-400 font-mono-num text-right"
+                    onKeyDown={e => { if (e.key === 'Enter' && newItemDesc.trim()) handleCreateCustom(); }}
+                  />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={handleCreateCustom}
+                  disabled={!newItemDesc.trim()}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+                >
+                  <Plus size={14} />
+                  Crear item
+                </button>
+                <button
+                  onClick={() => { setCreatingIn(null); setNewItemDesc(''); setNewItemUnidad(''); setNewItemPrecio(''); }}
+                  className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
