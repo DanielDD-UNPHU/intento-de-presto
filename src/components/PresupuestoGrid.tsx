@@ -46,6 +46,7 @@ export function PresupuestoGrid({
   const startEdit = useCallback((id: string, field: EditableField) => {
     const c = conceptos[id];
     if (!c) return;
+    if (field === 'codigo') return; // Código se genera automáticamente
     if (c.tipo === 'Capitulo' && NUMERIC_FIELDS.includes(field)) return;
     const value = c[field];
     setEditingCell({ id, field });
@@ -276,27 +277,38 @@ export function PresupuestoGrid({
           const isComponentInstance = !!c.componentSourceId;
           const isComponentSource = !!c.isComponentSource;
 
+          const canDrop = isChapter;
+          const dropColor = canDrop ? 'blue' : 'red';
+
           return (
             <div
               key={id}
               className={`grid border-b transition-all duration-75 relative ${
-                isDropTarget
+                isDropTarget && canDrop
                   ? 'bg-blue-100/80 border-blue-200'
-                  : isSelected
-                    ? 'bg-blue-50/80 border-blue-100'
-                    : isChapter
-                      ? 'bg-slate-50/60 border-slate-100 hover:bg-slate-50'
-                      : 'border-slate-100/60 row-hover-glow'
+                  : isDropTarget && !canDrop
+                    ? 'bg-red-50/60 border-red-200'
+                    : isSelected
+                      ? 'bg-blue-50/80 border-blue-100'
+                      : isChapter
+                        ? 'bg-slate-50/60 border-slate-100 hover:bg-slate-50'
+                        : 'border-slate-100/60 row-hover-glow'
               }`}
               style={{ gridTemplateColumns: COL_TEMPLATE, height: 34 }}
               onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
               onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}
             >
-              {/* Drop indicator line — sits on top edge of the row */}
+              {/* Drop indicator line — blue for folders, red for invalid */}
               {isDropTarget && (
-                <div className="absolute -top-[1.5px] left-0 right-0 h-[3px] bg-blue-500 z-20 pointer-events-none rounded-full shadow-[0_0_6px_rgba(37,99,235,0.5)]">
-                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full bg-blue-500 border-2 border-white shadow" />
+                <div className={`absolute -top-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full ${
+                  canDrop
+                    ? 'bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]'
+                    : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
+                }`}>
+                  <div className={`absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow ${
+                    canDrop ? 'bg-blue-500' : 'bg-red-500'
+                  }`} />
                 </div>
               )}
 
