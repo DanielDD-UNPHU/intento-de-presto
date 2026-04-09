@@ -40,6 +40,7 @@ export interface BC3Item {
   descripcion: string;
   unidad: string;
   precio: number;
+  isCustom?: boolean; // Created by the company user, not from superadmin catalog
 }
 
 export interface BC3SubCategoria {
