@@ -321,6 +321,22 @@ export function usePresupuesto() {
         setRootIds(updatedRootIds);
       }
 
+      // Auto-expand the entire path so the new item is visible
+      setExpandedIds(prev => {
+        const expanded = new Set(prev);
+        // Expand the target (if it was a Capitulo)
+        if (targetId) expanded.add(targetId);
+        // Expand the auto-created folder
+        expanded.add(parentId!);
+        // Expand all ancestors up to root
+        let cur = next[parentId!];
+        while (cur?.parentId) {
+          expanded.add(cur.parentId);
+          cur = next[cur.parentId];
+        }
+        return expanded;
+      });
+
       return next;
     });
   }, [rootIds, ensureCategoryFolder]);

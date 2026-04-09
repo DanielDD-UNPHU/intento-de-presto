@@ -14,7 +14,7 @@ interface Props {
   onToggleExpand: (id: string) => void;
   onUpdate: (id: string, updates: Partial<ConceptoPresupuesto>) => void;
   onRevertOverride: (id: string, field: OverridableField) => void;
-  onDropBC3: (payload: BC3DragPayload, targetId: string | null) => void;
+  onDropBC3: (payload: BC3DragPayload, targetId: string | null, cantidad: number) => void;
   dropTargetId: string | null;
   onSetDropTarget: (id: string | null) => void;
   getTotal: (id: string) => number;
@@ -161,7 +161,7 @@ export function PresupuestoGrid({
     if (!data) return;
     try {
       const payload: BC3DragPayload = JSON.parse(data);
-      onDropBC3(payload, targetId);
+      onDropBC3(payload, targetId, 1);
     } catch { /* ignore bad data */ }
   }, [onDropBC3, onSetDropTarget]);
 
@@ -281,7 +281,7 @@ export function PresupuestoGrid({
               key={id}
               className={`grid border-b transition-all duration-75 relative ${
                 isDropTarget
-                  ? 'bg-blue-50 border-blue-300 border-dashed ring-1 ring-blue-300 ring-inset'
+                  ? 'bg-blue-100/80 border-blue-200'
                   : isSelected
                     ? 'bg-blue-50/80 border-blue-100'
                     : isChapter
@@ -289,10 +289,17 @@ export function PresupuestoGrid({
                       : 'border-slate-100/60 row-hover-glow'
               }`}
               style={{ gridTemplateColumns: COL_TEMPLATE, height: 34 }}
-              onDragOver={isChapter ? e => { e.stopPropagation(); handleDragOver(e, id); } : undefined}
-              onDragLeave={isChapter ? handleDragLeave : undefined}
-              onDrop={isChapter ? e => { e.stopPropagation(); handleDrop(e, id); } : undefined}
+              onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
+              onDragLeave={handleDragLeave}
+              onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}
             >
+              {/* Drop indicator line — sits on top edge of the row */}
+              {isDropTarget && (
+                <div className="absolute -top-[1.5px] left-0 right-0 h-[3px] bg-blue-500 z-20 pointer-events-none rounded-full shadow-[0_0_6px_rgba(37,99,235,0.5)]">
+                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full bg-blue-500 border-2 border-white shadow" />
+                </div>
+              )}
+
               {/* Selection stripe */}
               {isSelected && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-500 rounded-r-sm" />}
 
