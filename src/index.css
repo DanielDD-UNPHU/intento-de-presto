@@ -1,0 +1,100 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  /* Blueprint palette */
+  --slate-deep: #0f172a;
+  --slate-mid: #1e293b;
+  --slate-soft: #334155;
+  --surface: #f8fafc;
+  --surface-alt: #f1f5f9;
+  --grid-line: #e2e8f0;
+  --grid-line-strong: #cbd5e1;
+  --accent-blue: #2563eb;
+  --accent-cyan: #06b6d4;
+  --accent-amber: #d97706;
+  --accent-gold: #b45309;
+  --accent-emerald: #059669;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --selection-bg: #dbeafe;
+  --selection-border: #3b82f6;
+}
+
+* { box-sizing: border-box; margin: 0; }
+
+body {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  background: var(--surface-alt);
+  color: var(--text-primary);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* Scrollbar — thin, subtle */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* Monospace for all numeric data */
+.font-mono-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-feature-settings: 'tnum' 1;
+  letter-spacing: -0.02em;
+}
+
+/* Blueprint grid pattern for empty states */
+.blueprint-grid {
+  background-image:
+    linear-gradient(rgba(37, 99, 235, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Subtle noise texture overlay */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Floating toolbar entrance */
+@keyframes toolbar-enter {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+.toolbar-animate {
+  animation: toolbar-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Row hover glow */
+.row-hover-glow {
+  transition: background-color 0.1s ease, box-shadow 0.1s ease;
+}
+.row-hover-glow:hover {
+  box-shadow: inset 3px 0 0 0 var(--accent-blue);
+}
+
+/* Cell edit ring */
+.cell-edit-ring {
+  box-shadow: inset 0 0 0 2px var(--accent-blue);
+  background: white !important;
+}
+
+/* Smooth panel transitions */
+.panel-slide {
+  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
