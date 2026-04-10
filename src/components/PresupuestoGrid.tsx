@@ -214,33 +214,8 @@ export function PresupuestoGrid({
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
 
-      // Smart snap: if dragging over a Capitulo that already has the parent folder,
-      // highlight that folder instead
-      let snapTargetId = targetId;
-      if (targetId && bc3DragPayload) {
-        const target = conceptos[targetId];
-        if (target?.tipo === 'Capitulo') {
-          // Look for existing subCategory folder (A04#) inside this target
-          const existingSub = target.childrenIds.find(
-            cid => conceptos[cid]?.codigo === bc3DragPayload.subCategoryCode
-          );
-          if (existingSub) {
-            snapTargetId = existingSub;
-            // Even deeper: look for subSubCategory (A0402#) inside the sub
-            const subConcept = conceptos[existingSub];
-            if (subConcept) {
-              const existingSubSub = subConcept.childrenIds.find(
-                cid => conceptos[cid]?.codigo === bc3DragPayload.subSubCategoryCode
-              );
-              if (existingSubSub) {
-                snapTargetId = existingSubSub;
-              }
-            }
-          }
-        }
-      }
-
-      if (snapTargetId !== dropTargetId) onSetDropTarget(snapTargetId);
+      // Bounding box: always wraps the Capitulo the cursor is on
+      if (targetId !== dropTargetId) onSetDropTarget(targetId);
       onSetDropPosition('inside');
     } else if (isRow && targetId) {
       if (canRowDropOn(targetId)) {
@@ -507,9 +482,6 @@ export function PresupuestoGrid({
                 <div className="absolute -bottom-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]">
                   <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow bg-blue-500" />
                 </div>
-              )}
-              {isDropTarget && dropPosition === 'inside' && (
-                <div className="absolute inset-0 z-20 pointer-events-none rounded border-2 border-blue-400 border-dashed bg-blue-100/30" />
               )}
 
               {/* Selection stripe */}
