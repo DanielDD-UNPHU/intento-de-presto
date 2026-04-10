@@ -18,51 +18,62 @@ interface RawDecomposition {
  *
  * BC3 hierarchy (4 levels):
  *   Level 0: A#, M#, H#, E#, S#, C#         → BC3Categoria
- *   Level 1: A01#, M01#, H01#                → BC3SubCategoria
- *   Level 2: A0100#, M0101#                  → grouped into SubCategoria items
- *   Level 3: A010000, M010101                → BC3Item
+ *   Level 1: A01#, A04#, M01#                → BC3Categoria (nested under level 0)
+ *   Level 2: A0400#, A0401#, M0101#          → BC3SubCategoria
+ *   Level 3: A040000, A040100, M010101       → BC3Item
  *
- * Levels 2+3 are flattened into SubCategoria.items.
+ * Level 0 categories contain level 1 sub-categories.
+ * Level 1 sub-categories contain level 2 sub-sub-categories as BC3SubCategoria.
+ * Level 2 sub-sub-categories contain level 3 items as BC3Item.
+ * If level 2 has no children but has a price, it becomes an item itself.
  */
 export function parseBC3File(content: string): BC3Data {
-  // Normalize line endings
   const normalized = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-  // Parse all records — BC3 records start with ~ and can span multiple lines
   const records = splitRecords(normalized);
 
   const concepts = new Map<string, RawConcept>();
   const decompositions: RawDecomposition[] = [];
 
   for (const record of records) {
-    const type = record.charAt(1); // character after ~
-
-    if (type === 'C') {
-      parseConcept(record, concepts);
-    } else if (type === 'D') {
-      parseDecomposition(record, decompositions);
-    }
-    // ~V, ~K, ~T, ~X, ~L — skipped
+    const type = record.charAt(1);
+    if (type === 'C') parseConcept(record, concepts);
+    else if (type === 'D') parseDecomposition(record, decompositions);
   }
 
-  // Build parent→children map from decompositions
+  // Build parent→children map
   const childrenMap = new Map<string, string[]>();
   for (const d of decompositions) {
-    const parentKey = normalizeCode(d.parentCode);
-    const childCodes = d.children.map(c => normalizeCode(c.code));
-    childrenMap.set(parentKey, childCodes);
+    childrenMap.set(normalizeCode(d.parentCode), d.children.map(c => normalizeCode(c.code)));
   }
 
-  // Identify hierarchy levels by code pattern
-  // Level 0 (top categories): single letter + # (e.g. "A#", "M#")
-  // Level 1 (subcategories): letter + 2 digits + # (e.g. "A01#")
-  // Level 2 (sub-sub): letter + 4 digits + # (e.g. "A0100#")
-  // Level 3 (items): letter + 6 digits (e.g. "A010000")
+  // Recursively collect all leaf items under a code
+  function collectItems(code: string): BC3Item[] {
+    const items: BC3Item[] = [];
+    const children = childrenMap.get(code) ?? [];
+
+    for (const childCode of children) {
+      const child = concepts.get(childCode);
+      if (!child) continue;
+
+      const grandchildren = childrenMap.get(childCode) ?? [];
+
+      if (grandchildren.length > 0) {
+        // This child has its own children — recurse
+        items.push(...collectItems(childCode));
+      } else if (child.price > 0 || child.unit) {
+        // Leaf item
+        items.push({
+          codigo: child.code,
+          descripcion: cleanDescription(child.description),
+          unidad: child.unit,
+          precio: child.price,
+        });
+      }
+    }
+    return items;
+  }
 
   const topCategories: BC3Categoria[] = [];
-
-  // Find root-level decomposition (the root concept that decomposes into top categories)
-  // Or find top categories by pattern matching
   const topCodes = findTopCategories(concepts, childrenMap);
 
   for (const topCode of topCodes) {
@@ -75,59 +86,53 @@ export function parseBC3File(content: string): BC3Data {
       children: [],
     };
 
-    // Get level-1 children of this top category
+    // Level 1 children (e.g. A01#, A04#)
     const level1Codes = childrenMap.get(topCode) ?? [];
 
     for (const l1Code of level1Codes) {
       const l1Concept = concepts.get(l1Code);
       if (!l1Concept) continue;
 
-      const subCategoria: BC3SubCategoria = {
-        codigo: l1Concept.code,
-        nombre: cleanDescription(l1Concept.description),
-        items: [],
-      };
-
-      // Get level-2 children (sub-subcategories)
+      // Level 2 children (e.g. A0400#, A0401#)
       const level2Codes = childrenMap.get(l1Code) ?? [];
 
-      for (const l2Code of level2Codes) {
-        const l2Concept = concepts.get(l2Code);
-
-        // Get level-3 items under this sub-subcategory
-        const level3Codes = childrenMap.get(l2Code) ?? [];
-
-        for (const l3Code of level3Codes) {
-          const l3Concept = concepts.get(l3Code);
-          if (!l3Concept) continue;
-
-          subCategoria.items.push({
-            codigo: l3Concept.code,
-            descripcion: cleanDescription(l3Concept.description),
-            unidad: l3Concept.unit || (l2Concept?.unit ?? ''),
-            precio: l3Concept.price,
+      if (level2Codes.length === 0) {
+        // Level 1 has no sub-subcategories — treat its items directly
+        const items = collectItems(l1Code);
+        if (items.length > 0) {
+          categoria.children.push({
+            codigo: l1Concept.code,
+            nombre: cleanDescription(l1Concept.description),
+            items,
           });
         }
+        continue;
+      }
 
-        // If level 2 has no children, it might itself be a leaf item
-        if (level3Codes.length === 0 && l2Concept && l2Concept.price > 0) {
-          subCategoria.items.push({
+      // Level 1 has level 2 children — each becomes a SubCategoria
+      for (const l2Code of level2Codes) {
+        const l2Concept = concepts.get(l2Code);
+        if (!l2Concept) continue;
+
+        const items = collectItems(l2Code);
+
+        // If no children items but has a price, it's a leaf
+        if (items.length === 0 && l2Concept.price > 0) {
+          items.push({
             codigo: l2Concept.code,
             descripcion: cleanDescription(l2Concept.description),
             unidad: l2Concept.unit,
             precio: l2Concept.price,
           });
         }
-      }
 
-      // If level 1 has direct leaf children (no level-2 intermediary)
-      if (level2Codes.length === 0) {
-        // The l1 children might be direct items — check childrenMap
-        // This handles cases where the hierarchy is only 2 levels deep
-      }
-
-      if (subCategoria.items.length > 0) {
-        categoria.children.push(subCategoria);
+        if (items.length > 0) {
+          categoria.children.push({
+            codigo: l2Concept.code,
+            nombre: cleanDescription(l2Concept.description),
+            items,
+          });
+        }
       }
     }
 
