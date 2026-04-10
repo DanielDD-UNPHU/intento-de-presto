@@ -154,18 +154,18 @@ export function PresupuestoEditor() {
 
       {/* ── Sub-toolbar ── */}
       <div className="bg-white border-b border-slate-200/60 px-5 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num">
+          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{visibleIds.length}</span>
+          <span>items</span>
+        </div>
+
+        <div className="flex items-center gap-2">
           <button
             onClick={() => setShowBloqueModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200/50"
           >
             <Building2 size={13} strokeWidth={2.5} /> Bloques y Niveles
           </button>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num">
-          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{visibleIds.length}</span>
-          <span>items</span>
         </div>
       </div>
 
@@ -199,6 +199,12 @@ export function PresupuestoEditor() {
             onSetBC3DragPayload={store.setBC3DragPayload}
             getTotal={store.getTotal}
             getTotalInterno={store.getTotalInterno}
+            onCreateFolder={(parentId) => {
+              setNewFolderName('');
+              setShowFolderModal(true);
+              store.setSelectedIds(new Set([parentId]));
+            }}
+            onDeleteConcepto={store.deleteConcepto}
           />
         </div>
       </div>
@@ -215,7 +221,12 @@ export function PresupuestoEditor() {
         onCopyAsComponent={handleCopyAsComponent}
         onCopyAsIndependent={handleCopyAsIndependent}
         onCreateFolder={handleCreateFolder}
-        hasCapituloSelected={store.getSelectedCapituloId() !== null}
+        hasCapituloSelected={(() => {
+          const selId = store.getSelectedCapituloId();
+          if (!selId) return false;
+          const c = store.conceptos[selId];
+          return !!c && !c.codigo.endsWith('#');
+        })()}
       />
 
       {/* ── New folder modal ── */}

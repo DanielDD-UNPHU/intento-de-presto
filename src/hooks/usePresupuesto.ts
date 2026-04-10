@@ -848,6 +848,35 @@ export function usePresupuesto() {
 
   // ── Helpers ──
 
+  // Delete a single concepto and all its descendants
+  const deleteConcepto = useCallback((id: string) => {
+    setConceptos(prev => {
+      const next = { ...prev };
+      const idsToDelete = new Set<string>();
+
+      function collect(cid: string) {
+        idsToDelete.add(cid);
+        next[cid]?.childrenIds.forEach(collect);
+      }
+      collect(id);
+
+      // Remove from parent
+      const c = next[id];
+      if (c?.parentId && next[c.parentId]) {
+        next[c.parentId] = {
+          ...next[c.parentId],
+          childrenIds: next[c.parentId].childrenIds.filter(cid => cid !== id),
+        };
+      }
+
+      idsToDelete.forEach(cid => delete next[cid]);
+      return next;
+    });
+
+    setRootIds(prev => prev.filter(rid => rid !== id));
+    setSelectedIds(new Set());
+  }, []);
+
   const getSelectedCapituloId = useCallback((): string | null => {
     if (selectedIds.size !== 1) return null;
     const id = Array.from(selectedIds)[0];
@@ -867,6 +896,6 @@ export function usePresupuesto() {
     deleteSelected, moveSelected, indentSelected, outdentSelected,
     pasteFromClipboard, changeTipoSelected,
     copyAsComponent, copyAsIndependent, propagateComponentChange, moveConceptoTo,
-    getSelectedCapituloId,
+    getSelectedCapituloId, deleteConcepto,
   };
 }

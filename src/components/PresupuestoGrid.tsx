@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import type { ConceptoPresupuesto, OverridableField, BC3DragPayload } from '../types';
 import { TipoBadge } from './TipoBadge';
 import { formatMoney } from '../utils/formatters';
-import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2 } from 'lucide-react';
 
 interface Props {
   visibleIds: string[];
@@ -24,12 +24,14 @@ interface Props {
   onSetBC3DragPayload: (p: BC3DragPayload | null) => void;
   getTotal: (id: string) => number;
   getTotalInterno: (id: string) => number;
+  onCreateFolder: (parentId: string) => void;
+  onDeleteConcepto: (id: string) => void;
 }
 
 type EditableField = 'codigo' | 'descripcion' | 'unidad' | 'cantidad' | 'precioRef' | 'precioInterno' | 'precioCliente';
 
 const NUMERIC_FIELDS: EditableField[] = ['cantidad', 'precioRef', 'precioInterno', 'precioCliente'];
-const COL_TEMPLATE = '42px 36px 84px 1fr 48px 120px 120px 120px 120px 140px';
+const COL_TEMPLATE = '42px 36px 84px 1fr 48px 120px 120px 120px 120px 140px 70px';
 
 // Generate display code based on position in tree (e.g. "1.2.3")
 function buildAutoCode(id: string, conceptos: Record<string, ConceptoPresupuesto>, rootIds: string[]): string {
@@ -53,13 +55,14 @@ export function PresupuestoGrid({
   visibleIds, rootIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
   onRevertOverride, onDropBC3, onMoveRow, dropTargetId, onSetDropTarget,
   dropPosition, onSetDropPosition, bc3DragPayload, onSetBC3DragPayload,
-  getTotal, getTotalInterno,
+  getTotal, getTotalInterno, onCreateFolder, onDeleteConcepto,
 }: Props) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
   const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -428,7 +431,7 @@ export function PresupuestoGrid({
         <div className="grid text-[9px] font-bold text-slate-400 uppercase tracking-[0.08em]"
           style={{ gridTemplateColumns: COL_TEMPLATE }}
         >
-          {['#', 'NatC', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe'].map(
+          {['#', 'NatC', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe', ''].map(
             (label, i) => (
               <div key={label} className={`px-2 py-2.5 ${i < 9 ? 'border-r border-slate-100' : ''} ${i >= 5 ? 'text-right' : i === 0 ? 'text-center' : ''}`}>
                 {label}
@@ -664,6 +667,38 @@ export function PresupuestoGrid({
                   {formatMoney(total)}
                 </span>
               </div>
+
+              {/* Actions — only for Niveles and non-BC3 folders */}
+              <div className="flex items-center justify-center gap-0.5">
+                {(() => {
+                  const isBC3Folder = c.codigo.endsWith('#');
+                  const isRootNivel = !c.parentId;
+                  const canCreateFolder = isChapter && !isBC3Folder;
+
+                  return (
+                    <>
+                      {canCreateFolder && (
+                        <button
+                          className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                          onClick={e => { e.stopPropagation(); onCreateFolder(id); }}
+                          title="Crear carpeta"
+                        >
+                          <FolderPlus size={13} />
+                        </button>
+                      )}
+                      {isRootNivel && (
+                        <button
+                          className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                          onClick={e => { e.stopPropagation(); setConfirmDeleteId(id); }}
+                          title="Eliminar"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
           );
         })
@@ -689,6 +724,46 @@ export function PresupuestoGrid({
                 <div className="text-[8px] text-blue-500/60 uppercase font-bold tracking-wider leading-none mb-0.5">Cliente</div>
                 <span className="text-[13px] font-mono-num font-bold text-blue-700">{formatMoney(grandTotalCliente)}</span>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-[380px] p-5">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
+                <Trash2 size={18} className="text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-slate-900">Eliminar</h2>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {conceptos[confirmDeleteId]?.descripcion}
+                </p>
+              </div>
+            </div>
+            <p className="text-[12px] text-slate-600 mb-4">
+              Se eliminara este elemento y todo su contenido. Esta accion no se puede deshacer.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  onDeleteConcepto(confirmDeleteId);
+                  setConfirmDeleteId(null);
+                }}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
+              >
+                Si, eliminar
+              </button>
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl"
+              >
+                Cancelar
+              </button>
             </div>
           </div>
         </div>
