@@ -415,34 +415,38 @@ export function PresupuestoGrid({
           const isComponentInstance = !!c.componentSourceId;
           const isComponentSource = !!c.isComponentSource;
 
-          // Check if this row is inside the drop target folder (for bounding box)
-          let isInsideDropTarget = false;
+          // Check if this row is the drop target or a DESCENDANT of it (for bounding box)
+          let isInDropGroup = false;
           let isFirstInDropGroup = false;
           let isLastInDropGroup = false;
-          if (dropTargetId && dropPosition === 'inside') {
-            // Walk up parents to see if this row is a descendant of dropTargetId
-            let walk: ConceptoPresupuesto | undefined = c;
-            while (walk) {
-              if (walk.id === dropTargetId) { isInsideDropTarget = true; break; }
-              walk = walk.parentId ? conceptos[walk.parentId] : undefined;
-            }
-            if (isInsideDropTarget || isDropTarget) {
-              // Check if first/last in the visible group
-              if (idx === 0 || !isInsideGroupAt(idx - 1)) isFirstInDropGroup = true;
-              if (idx === visibleIds.length - 1 || !isInsideGroupAt(idx + 1)) isLastInDropGroup = true;
-            }
-          }
 
-          function isInsideGroupAt(i: number): boolean {
-            const otherId = visibleIds[i];
-            if (!otherId) return false;
-            if (otherId === dropTargetId) return true;
-            let w = conceptos[otherId];
-            while (w) {
-              if (w.id === dropTargetId) return true;
-              w = w.parentId ? conceptos[w.parentId] : undefined;
+          if (dropTargetId && dropPosition === 'inside') {
+            if (isDropTarget) {
+              isInDropGroup = true;
+            } else {
+              // Check if this row is a descendant of the dropTarget (walk UP from this row)
+              let walk = c.parentId ? conceptos[c.parentId] : undefined;
+              while (walk) {
+                if (walk.id === dropTargetId) { isInDropGroup = true; break; }
+                walk = walk.parentId ? conceptos[walk.parentId] : undefined;
+              }
             }
-            return false;
+
+            if (isInDropGroup) {
+              const checkGroupAt = (i: number): boolean => {
+                const oid = visibleIds[i];
+                if (!oid) return false;
+                if (oid === dropTargetId) return true;
+                let w = conceptos[oid]?.parentId ? conceptos[conceptos[oid].parentId!] : undefined;
+                while (w) {
+                  if (w.id === dropTargetId) return true;
+                  w = w.parentId ? conceptos[w.parentId] : undefined;
+                }
+                return false;
+              };
+              if (idx === 0 || !checkGroupAt(idx - 1)) isFirstInDropGroup = true;
+              if (idx === visibleIds.length - 1 || !checkGroupAt(idx + 1)) isLastInDropGroup = true;
+            }
           }
 
           // For BC3 drops, only Capitulos can receive. For row moves, all rows are valid targets.
@@ -464,7 +468,7 @@ export function PresupuestoGrid({
             <div
               key={id}
               className={`grid border-b transition-all duration-75 relative ${
-                (isDropTarget || isInsideDropTarget)
+                isInDropGroup
                   ? 'bg-blue-50/60'
                   : isSelected
                     ? 'bg-blue-50/80 border-blue-100'
@@ -474,7 +478,7 @@ export function PresupuestoGrid({
               }`}
               style={{
                 gridTemplateColumns: COL_TEMPLATE, height: 34,
-                ...(isDropTarget || isInsideDropTarget ? {
+                ...(isInDropGroup ? {
                   borderLeft: '3px solid #3b82f6',
                   borderRight: '3px solid #3b82f6',
                   borderTop: isFirstInDropGroup ? '3px solid #3b82f6' : undefined,
