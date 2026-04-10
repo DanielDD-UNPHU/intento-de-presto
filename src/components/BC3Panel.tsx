@@ -117,12 +117,12 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
         items: [...sub.items, ...(customItems[sub.codigo] ?? [])],
       })),
     }));
-  }, [customItems]);
+  }, [customItems, baseData]);
 
   const filteredData = useMemo(() => {
     if (!search.trim()) return mergedData;
     const q = search.toLowerCase();
-    return mergedData
+    const filtered = mergedData
       .map(cat => ({
         ...cat,
         children: cat.children
@@ -135,6 +135,22 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
           .filter(sub => sub.items.length > 0),
       }))
       .filter(cat => cat.children.length > 0);
+
+    // Auto-expand all categories/subcategories that have results
+    if (search.trim()) {
+      const newCats = new Set<string>();
+      const newSubs = new Set<string>();
+      for (const cat of filtered) {
+        newCats.add(cat.codigo);
+        for (const sub of cat.children) {
+          newSubs.add(sub.codigo);
+        }
+      }
+      setExpandedCats(newCats);
+      setExpandedSubs(newSubs);
+    }
+
+    return filtered;
   }, [search, mergedData]);
 
   const toggleCat = (codigo: string) => {
