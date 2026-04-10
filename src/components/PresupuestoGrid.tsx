@@ -214,28 +214,37 @@ export function PresupuestoGrid({
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
 
-      // Find the nearest Bloque ancestor — bounding box wraps the whole bloque
-      let bloqueId: string | null = null;
+      // Determine the smart drop target for BC3 items
+      let smartTarget: string | null = null;
+
       if (targetId) {
-        let walk = conceptos[targetId];
-        // Walk up until we find a BLQ-* concept or a direct child of a Nivel
-        while (walk) {
-          // A "bloque" is a Capitulo whose parent is a Nivel (root level)
-          if (walk.parentId && !conceptos[walk.parentId]?.parentId) {
-            bloqueId = walk.id;
-            break;
+        const target = conceptos[targetId];
+        if (!target) {
+          // No target
+        } else if (!target.parentId) {
+          // Target is a root-level Nivel (NIVEL 1, NIVEL 2, etc.)
+          // Bounding box wraps the entire Nivel — item lands as sibling of bloques
+          smartTarget = targetId;
+        } else {
+          // Target is inside a Nivel — find the Bloque (direct child of Nivel)
+          let walk: ConceptoPresupuesto | undefined = target;
+          while (walk) {
+            // A bloque is a direct child of a root Nivel
+            if (walk.parentId && !conceptos[walk.parentId]?.parentId) {
+              smartTarget = walk.id;
+              break;
+            }
+            if (!walk.parentId) break;
+            walk = walk.parentId ? conceptos[walk.parentId] : undefined;
           }
-          // If we're already at a root-child (bloque itself)
-          if (!walk.parentId) break;
-          walk = walk.parentId ? conceptos[walk.parentId] : undefined;
-        }
-        // If targetId itself is a nivel (root), don't highlight
-        if (!bloqueId && conceptos[targetId]?.parentId) {
-          bloqueId = targetId;
+          // If we didn't find a bloque, the target itself might be a bloque
+          if (!smartTarget && target.parentId) {
+            smartTarget = targetId;
+          }
         }
       }
 
-      if (bloqueId !== dropTargetId) onSetDropTarget(bloqueId);
+      if (smartTarget !== dropTargetId) onSetDropTarget(smartTarget);
       onSetDropPosition('inside');
     } else if (isRow && targetId) {
       if (canRowDropOn(targetId)) {
