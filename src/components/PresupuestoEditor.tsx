@@ -1,14 +1,22 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { usePresupuesto } from '../hooks/usePresupuesto';
 import { BC3Panel } from './BC3Panel';
 import { FloatingToolbar } from './FloatingToolbar';
 import { PresupuestoGrid } from './PresupuestoGrid';
 import { PropagationDialog } from './PropagationDialog';
 import { AddBloqueNivelModal } from './AddBloqueNivelModal';
+import { ZoomControl } from './ZoomControl';
+import { TotalGeneralPanel } from './TotalGeneralPanel';
+import { SearchBar } from './SearchBar';
+import { normalizeText } from '../utils/searchUtils';
 import { formatMoney } from '../utils/formatters';
 import { parsePastedRows } from '../utils/formatters';
+import { exportToBC3, downloadBlob } from '../utils/exportBC3';
+import { exportToExcel } from '../utils/exportExcel';
+import { exportToPDF } from '../utils/exportPDF';
 import {
-  Undo2, Redo2, FileDown, Save, Building2, TrendingUp
+  Undo2, Redo2, FileDown, Save, Building2, TrendingUp,
+  FileSpreadsheet, FileText, FileCode
 } from 'lucide-react';
 
 export function PresupuestoEditor() {
@@ -17,12 +25,81 @@ export function PresupuestoEditor() {
   const [showBloqueModal, setShowBloqueModal] = useState(false);
   const [showFolderModal, setShowFolderModal] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [zoom, setZoom] = useState<number>(() => {
+    const saved = localStorage.getItem('intentodepresto.zoom');
+    const parsed = saved ? Number(saved) : 100;
+    return Number.isFinite(parsed) && parsed >= 50 && parsed <= 200 ? parsed : 100;
+  });
+  const [footerHeight, setFooterHeight] = useState<number>(() => {
+    const saved = localStorage.getItem('intentodepresto.footerHeight');
+    const parsed = saved ? Number(saved) : 64;
+    return Number.isFinite(parsed) && parsed >= 56 && parsed <= 400 ? parsed : 64;
+  });
+  const [searchQuery, setSearchQuery] = useState('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const visibleIds = store.getVisibleIds();
+  useEffect(() => {
+    localStorage.setItem('intentodepresto.zoom', String(zoom));
+  }, [zoom]);
+
+  useEffect(() => {
+    localStorage.setItem('intentodepresto.footerHeight', String(footerHeight));
+  }, [footerHeight]);
+
+  const baseVisibleIds = store.getVisibleIds();
+
+  // Filtered visible IDs based on search query.
+  // When searching: matches + all their ancestors, ignoring expand/collapse state.
+  // When empty: respects normal expand/collapse via getVisibleIds.
+  const { visibleIds, searchMatchCount } = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      return { visibleIds: baseVisibleIds, searchMatchCount: null as number | null };
+    }
+    const q = normalizeText(trimmed);
+    const matches = new Set<string>();
+    for (const id in store.conceptos) {
+      const c = store.conceptos[id];
+      if (!c) continue;
+      const desc = normalizeText(c.descripcion);
+      const cod = normalizeText(c.codigo);
+      if (desc.includes(q) || cod.includes(q)) matches.add(id);
+    }
+
+    // Expand each match with all its ancestors so the tree context is preserved.
+    const visible = new Set<string>();
+    for (const id of matches) {
+      let cur: string | null | undefined = id;
+      while (cur) {
+        if (visible.has(cur)) break;
+        visible.add(cur);
+        cur = store.conceptos[cur]?.parentId ?? null;
+      }
+    }
+
+    // Walk the tree in DFS order from rootIds, only including IDs in `visible`.
+    const ordered: string[] = [];
+    const walk = (id: string) => {
+      if (!visible.has(id)) return;
+      ordered.push(id);
+      const c = store.conceptos[id];
+      if (!c) return;
+      for (const childId of c.childrenIds) walk(childId);
+    };
+    for (const rootId of store.rootIds) walk(rootId);
+
+    return { visibleIds: ordered, searchMatchCount: matches.size };
+  }, [searchQuery, store.conceptos, store.rootIds, baseVisibleIds]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+      }
       if (e.altKey) {
         if (e.key === 'ArrowUp') { e.preventDefault(); store.moveSelected('up'); }
         if (e.key === 'ArrowDown') { e.preventDefault(); store.moveSelected('down'); }
@@ -136,30 +213,98 @@ export function PresupuestoEditor() {
 
             <div className="w-px h-8 bg-slate-200" />
 
-            <div className="flex items-center gap-0.5">
-              {[
-                { icon: Undo2, title: 'Deshacer' },
-                { icon: Redo2, title: 'Rehacer' },
-                { icon: FileDown, title: 'Exportar' },
-                { icon: Save, title: 'Guardar' },
-              ].map(({ icon: Icon, title }) => (
-                <button key={title} className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title={title}>
-                  <Icon size={15} strokeWidth={2} />
-                </button>
-              ))}
+            <div className="flex items-center gap-0.5 relative">
+              <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Deshacer">
+                <Undo2 size={15} strokeWidth={2} />
+              </button>
+              <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Rehacer">
+                <Redo2 size={15} strokeWidth={2} />
+              </button>
+              <button
+                onClick={() => setExportMenuOpen(v => !v)}
+                className={`p-2 rounded-lg transition-colors ${exportMenuOpen ? 'text-blue-600 bg-blue-50' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}
+                title="Exportar"
+              >
+                <FileDown size={15} strokeWidth={2} />
+              </button>
+              <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Guardar">
+                <Save size={15} strokeWidth={2} />
+              </button>
+
+              {exportMenuOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setExportMenuOpen(false)} />
+                  <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-white rounded-xl shadow-xl border border-slate-200/80 py-1.5 overflow-hidden">
+                    <div className="px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-slate-400">Exportar presupuesto</div>
+                    <button
+                      onClick={() => {
+                        const blob = exportToBC3({ conceptos: store.conceptos, rootIds: store.rootIds, projectName: 'Torre Residencial Los Prados' });
+                        downloadBlob(blob, 'Torre_Residencial_Los_Prados.bc3');
+                        setExportMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <FileCode size={14} className="text-purple-600" />
+                      <div className="flex-1 text-left">
+                        <div>BC3 (FIEBDC-3)</div>
+                        <div className="text-[9px] text-slate-400">Formato estándar Presto</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        exportToExcel({ conceptos: store.conceptos, rootIds: store.rootIds, projectName: 'Torre Residencial Los Prados' });
+                        setExportMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <FileSpreadsheet size={14} className="text-emerald-600" />
+                      <div className="flex-1 text-left">
+                        <div>Excel (.xlsx)</div>
+                        <div className="text-[9px] text-slate-400">Hoja de cálculo con totales</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        exportToPDF({ conceptos: store.conceptos, rootIds: store.rootIds, projectName: 'Torre Residencial Los Prados', companyName: 'LOREGO BOSQUILLA SRL' });
+                        setExportMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <FileText size={14} className="text-red-600" />
+                      <div className="flex-1 text-left">
+                        <div>PDF</div>
+                        <div className="text-[9px] text-slate-400">Reporte imprimible</div>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
       </header>
 
       {/* ── Sub-toolbar ── */}
-      <div className="bg-white border-b border-slate-200/60 px-5 py-1.5 flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num">
+      <div className="bg-white border-b border-slate-200/60 px-5 py-1.5 flex items-center gap-4">
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num shrink-0">
           <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{visibleIds.length}</span>
           <span>items</span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex-1 flex justify-center">
+          <SearchBar
+            ref={searchInputRef}
+            value={searchQuery}
+            onChange={setSearchQuery}
+            resultCount={searchMatchCount}
+          />
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <ZoomControl zoom={zoom} onChange={setZoom} />
+
+          <div className="w-px h-6 bg-slate-200" />
+
           <button
             onClick={() => setShowBloqueModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200/50"
@@ -180,6 +325,8 @@ export function PresupuestoEditor() {
         />
         <div className="flex-1 flex flex-col min-w-0 bg-white">
           <PresupuestoGrid
+            zoom={zoom}
+            searchQuery={searchQuery}
             visibleIds={visibleIds}
             rootIds={store.rootIds}
             conceptos={store.conceptos}
@@ -205,6 +352,12 @@ export function PresupuestoEditor() {
               store.setSelectedIds(new Set([parentId]));
             }}
             onDeleteConcepto={store.deleteConcepto}
+          />
+          <TotalGeneralPanel
+            height={footerHeight}
+            onHeightChange={setFooterHeight}
+            grandTotalInterno={grandTotalInterno}
+            grandTotalCliente={grandTotal}
           />
         </div>
       </div>

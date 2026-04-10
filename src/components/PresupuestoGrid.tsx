@@ -3,6 +3,7 @@ import type { ConceptoPresupuesto, OverridableField, BC3DragPayload } from '../t
 import { TipoBadge } from './TipoBadge';
 import { formatMoney } from '../utils/formatters';
 import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2 } from 'lucide-react';
+import { highlightMatch } from '../utils/searchUtils';
 
 interface Props {
   visibleIds: string[];
@@ -26,6 +27,8 @@ interface Props {
   getTotalInterno: (id: string) => number;
   onCreateFolder: (parentId: string) => void;
   onDeleteConcepto: (id: string) => void;
+  zoom: number;
+  searchQuery: string;
 }
 
 type EditableField = 'codigo' | 'descripcion' | 'unidad' | 'cantidad' | 'precioRef' | 'precioInterno' | 'precioCliente';
@@ -55,7 +58,7 @@ export function PresupuestoGrid({
   visibleIds, rootIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
   onRevertOverride, onDropBC3, onMoveRow, dropTargetId, onSetDropTarget,
   dropPosition, onSetDropPosition, bc3DragPayload, onSetBC3DragPayload,
-  getTotal, getTotalInterno, onCreateFolder, onDeleteConcepto,
+  getTotal, getTotalInterno, onCreateFolder, onDeleteConcepto, zoom, searchQuery,
 }: Props) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -400,7 +403,9 @@ export function PresupuestoGrid({
         onDoubleClick={() => handleDoubleClick(id, field)}
       >
         <span className={`truncate flex-1 ${isNumeric ? 'text-right' : ''} ${isOverridden ? 'text-red-600 font-bold px-2' : 'px-2'}`}>
-          {displayValue}
+          {field === 'descripcion' && searchQuery && typeof displayValue === 'string'
+            ? highlightMatch(displayValue, searchQuery)
+            : displayValue}
         </span>
         {isOverridden && (
           <button
@@ -415,8 +420,6 @@ export function PresupuestoGrid({
     );
   };
 
-  const grandTotalCliente = visibleIds.reduce((sum, id) => sum + getTotal(id), 0);
-  const grandTotalInterno = visibleIds.reduce((sum, id) => sum + getTotalInterno(id), 0);
 
   return (
     <div
@@ -426,25 +429,25 @@ export function PresupuestoGrid({
       onDragLeave={handleDragLeave}
       onDrop={e => handleDrop(e, null)}
     >
+      <div className="grid" style={{ gridTemplateColumns: COL_TEMPLATE, gridAutoRows: 'min-content', zoom: zoom / 100 }}>
       {/* Column headers */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
-        <div className="grid text-[9px] font-bold text-slate-400 uppercase tracking-[0.08em]"
-          style={{ gridTemplateColumns: COL_TEMPLATE }}
-        >
-          {['#', 'NatC', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe', ''].map(
-            (label, i) => (
-              <div key={label} className={`px-2 py-2.5 ${i < 9 ? 'border-r border-slate-100' : ''} ${i >= 5 ? 'text-right' : i === 0 ? 'text-center' : ''}`}>
-                {label}
-              </div>
-            )
-          )}
-        </div>
+      <div
+        className="col-span-full grid sticky top-0 z-10 bg-white border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase tracking-[0.08em]"
+        style={{ gridTemplateColumns: 'subgrid' }}
+      >
+        {['#', 'NatC', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe', ''].map(
+          (label, i) => (
+            <div key={label} className={`px-2 py-2.5 ${i < 9 ? 'border-r border-slate-100' : ''} ${i >= 5 ? 'text-right' : i === 0 ? 'text-center' : ''}`}>
+              {label}
+            </div>
+          )
+        )}
       </div>
 
       {/* Rows */}
       {visibleIds.length === 0 ? (
         <div
-          className="flex flex-col items-center justify-center py-24 blueprint-grid min-h-[400px]"
+          className="col-span-full flex flex-col items-center justify-center py-24 blueprint-grid min-h-[400px]"
           onDragOver={e => handleDragOver(e, null)}
           onDrop={e => handleDrop(e, null)}
         >
@@ -522,7 +525,7 @@ export function PresupuestoGrid({
           return (
             <div
               key={id}
-              className={`grid border-b transition-all duration-75 relative ${
+              className={`col-span-full grid border-b transition-all duration-75 relative ${
                 isInDropGroup
                   ? 'bg-blue-50/60'
                   : isSelected
@@ -532,7 +535,7 @@ export function PresupuestoGrid({
                       : `${nivelBg} ${nivelBorder} border-slate-100/60 ${nivelHover}`
               }`}
               style={{
-                gridTemplateColumns: COL_TEMPLATE, height: 34,
+                gridTemplateColumns: 'subgrid', height: 34,
                 ...(isInDropGroup ? {
                   borderLeft: '3px solid #3b82f6',
                   borderRight: '3px solid #3b82f6',
@@ -704,30 +707,7 @@ export function PresupuestoGrid({
         })
       )}
 
-      {/* Footer totals */}
-      {visibleIds.length > 0 && (
-        <div className="sticky bottom-0 bg-white border-t-2 border-slate-200 shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
-          <div className="grid" style={{ gridTemplateColumns: COL_TEMPLATE, height: 40 }}>
-            <div className="col-span-6 flex items-center pl-3">
-              <span className="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Total general</span>
-            </div>
-            <div />
-            <div className="flex items-center justify-end px-2 border-r border-slate-100">
-              <div className="text-right">
-                <div className="text-[8px] text-amber-500/60 uppercase font-bold tracking-wider leading-none mb-0.5">Interno</div>
-                <span className="text-[12px] font-mono-num font-bold text-amber-600">{formatMoney(grandTotalInterno)}</span>
-              </div>
-            </div>
-            <div />
-            <div className="flex items-center justify-end px-2.5 bg-blue-50/50">
-              <div className="text-right">
-                <div className="text-[8px] text-blue-500/60 uppercase font-bold tracking-wider leading-none mb-0.5">Cliente</div>
-                <span className="text-[13px] font-mono-num font-bold text-blue-700">{formatMoney(grandTotalCliente)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Confirm delete modal */}
       {confirmDeleteId && (
