@@ -268,33 +268,22 @@ export function PresupuestoGrid({
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
 
-      // Determine the smart drop target for BC3 items
+      // Determine the smart drop target for BC3 items by walking UP from the
+      // hovered row to the nearest container: Nivel, Bloque, or custom Folder.
+      // Whichever is closest wins — so dropping inside a deeply nested folder
+      // lands in that folder, not in the parent bloque.
       let smartTarget: string | null = null;
 
       if (targetId) {
-        const target = conceptos[targetId];
-        if (!target) {
-          // No target
-        } else if (!target.parentId) {
-          // Target is a root-level Nivel (NIVEL 1, NIVEL 2, etc.)
-          // Bounding box wraps the entire Nivel — item lands as sibling of bloques
-          smartTarget = targetId;
-        } else {
-          // Target is inside a Nivel — find the Bloque (direct child of Nivel)
-          let walk: ConceptoPresupuesto | undefined = target;
-          while (walk) {
-            // A bloque is a direct child of a root Nivel
-            if (walk.parentId && !conceptos[walk.parentId]?.parentId) {
-              smartTarget = walk.id;
-              break;
-            }
-            if (!walk.parentId) break;
-            walk = walk.parentId ? conceptos[walk.parentId] : undefined;
+        let walk: ConceptoPresupuesto | undefined = conceptos[targetId];
+        while (walk) {
+          const role = getCapituloRole(walk);
+          if (role === 'nivel' || role === 'bloque' || role === 'folder') {
+            smartTarget = walk.id;
+            break;
           }
-          // If we didn't find a bloque, the target itself might be a bloque
-          if (!smartTarget && target.parentId) {
-            smartTarget = targetId;
-          }
+          if (!walk.parentId) break;
+          walk = conceptos[walk.parentId];
         }
       }
 
