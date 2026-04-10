@@ -31,6 +31,11 @@ export interface ConceptoPresupuesto {
   bloqueId?: string;
   nivelId?: string;
 
+  // True if this Capitulo represents a real construction block linked to the
+  // factibilidad module (e.g. BLOQUE A, BLOQUE B). False/undefined means it's
+  // a custom organizational folder created by the user (e.g. AREAS COMUNES).
+  esBloque?: boolean;
+
   // Override tracking — stores ORIGINAL values. Current value on concept IS the override.
   overrides?: FieldOverrides;
 

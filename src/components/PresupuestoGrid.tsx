@@ -512,7 +512,7 @@ export function PresupuestoGrid({
           const canDrop = isChapter; // BC3: only folders. Row drag shows blue line on all.
 
           // Role-based backgrounds + left border color (Nivel / Bloque / Folder / BC3 categoria)
-          const capituloRole = isChapter ? getCapituloRole(c, conceptos) : null;
+          const capituloRole = isChapter ? getCapituloRole(c) : null;
           const roleStyle = capituloRole ? ROLE_CONFIG[capituloRole] : null;
           const nivelBg = roleStyle?.rowBg ?? 'bg-white';
           const nivelBorder = roleStyle?.rowBorder ?? '';

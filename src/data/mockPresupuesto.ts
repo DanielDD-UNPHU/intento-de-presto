@@ -207,6 +207,20 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
     conceptos[item.id] = { ...item, nivel: calcNivel(item), orden };
   });
 
+  // Mark real construction blocks (linked to factibilidad). AREAS COMUNES
+  // and any other organizational folder is intentionally excluded.
+  const realBloqueIds = [
+    'S1-BA', 'S1-BB',
+    'PB-BA', 'PB-BB',
+    'N1-BA', 'N1-BB',
+    'N2-BA',
+    'N3-BA',
+    'AZ-BA',
+  ];
+  for (const id of realBloqueIds) {
+    if (conceptos[id]) conceptos[id].esBloque = true;
+  }
+
   return conceptos;
 }
 

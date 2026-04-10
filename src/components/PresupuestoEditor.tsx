@@ -445,9 +445,14 @@ export function PresupuestoEditor() {
             store.updateConcepto(id, { descripcion: nombre, codigo: `BLQ-${codigo}` });
           }}
           onAddNivel={(bloqueId, nombre, numero) => {
-            // Create a child Capitulo under the bloque
+            // Create a child Capitulo under the bloque — this represents a real
+            // construction block linked to factibilidad, so mark esBloque.
             const id = store.addConcepto(bloqueId, 'Capitulo');
-            store.updateConcepto(id, { descripcion: nombre, codigo: numero < 0 ? `S${Math.abs(numero)}` : numero === 0 ? 'PB' : `N${numero}` });
+            store.setConceptoDirectly(id, {
+              descripcion: nombre,
+              codigo: numero < 0 ? `S${Math.abs(numero)}` : numero === 0 ? 'PB' : `N${numero}`,
+              esBloque: true,
+            });
             store.toggleExpanded(bloqueId);
           }}
           onClose={() => setShowBloqueModal(false)}

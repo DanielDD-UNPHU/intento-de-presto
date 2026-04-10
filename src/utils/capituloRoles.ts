@@ -2,28 +2,11 @@ import type { ConceptoPresupuesto } from '../types';
 
 export type CapituloRole = 'nivel' | 'bloque' | 'folder' | 'bc3';
 
-// Real construction blocks usually start with "BLOQUE " or "TORRE " by convention
-// in dominican construction projects. Anything else at the same depth is treated
-// as a custom organizational folder (e.g. "AREAS COMUNES", "Estacionamientos").
-function looksLikeBloque(descripcion: string): boolean {
-  const normalized = descripcion
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
-    .toUpperCase();
-  return normalized.startsWith('BLOQUE ') || normalized.startsWith('TORRE ');
-}
-
-export function getCapituloRole(
-  c: ConceptoPresupuesto,
-  conceptos: Record<string, ConceptoPresupuesto>
-): CapituloRole | null {
+export function getCapituloRole(c: ConceptoPresupuesto): CapituloRole | null {
   if (c.tipo !== 'Capitulo') return null;
   if (c.codigo.endsWith('#')) return 'bc3';
   if (!c.parentId) return 'nivel';
-  const parent = conceptos[c.parentId];
-  const parentIsNivel = parent && !parent.parentId && parent.tipo === 'Capitulo' && !parent.codigo.endsWith('#');
-  if (parentIsNivel && looksLikeBloque(c.descripcion)) return 'bloque';
+  if (c.esBloque) return 'bloque';
   return 'folder';
 }
 
