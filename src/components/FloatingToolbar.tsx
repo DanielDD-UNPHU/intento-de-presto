@@ -2,7 +2,7 @@ import type { NaturalezaConcepto } from '../types';
 import { TIPO_CONFIG, TIPO_LIST } from '../utils/tipoConfig';
 import {
   ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Trash2, ChevronDown, Layers,
-  Link2, Copy
+  Link2, Copy, FolderPlus
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -16,11 +16,13 @@ interface Props {
   onChangeTipo: (tipo: NaturalezaConcepto) => void;
   onCopyAsComponent: () => void;
   onCopyAsIndependent: () => void;
+  onCreateFolder: () => void;
+  hasCapituloSelected: boolean;
 }
 
 export function FloatingToolbar({
   selectedCount, onMoveUp, onMoveDown, onIndent, onOutdent, onDelete, onChangeTipo,
-  onCopyAsComponent, onCopyAsIndependent,
+  onCopyAsComponent, onCopyAsIndependent, onCreateFolder, hasCapituloSelected,
 }: Props) {
   const [showTipoMenu, setShowTipoMenu] = useState(false);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
@@ -73,6 +75,15 @@ export function FloatingToolbar({
 
       <Btn onClick={onOutdent} title="Aumentar nivel (Alt+Left)"><ArrowLeft size={15} /></Btn>
       <Btn onClick={onIndent} title="Disminuir nivel (Alt+Right)"><ArrowRight size={15} /></Btn>
+
+      <div className="w-px h-7 bg-white/10" />
+
+      {/* Create folder — only when a Capitulo is selected */}
+      {hasCapituloSelected && (
+        <Btn onClick={onCreateFolder} title="Nueva carpeta dentro">
+          <FolderPlus size={15} />
+        </Btn>
+      )}
 
       <div className="w-px h-7 bg-white/10" />
 

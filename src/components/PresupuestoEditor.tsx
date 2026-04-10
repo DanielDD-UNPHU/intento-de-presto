@@ -15,6 +15,8 @@ export function PresupuestoEditor() {
   const store = usePresupuesto();
   const [bc3Open, setBc3Open] = useState(true);
   const [showBloqueModal, setShowBloqueModal] = useState(false);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
 
   const visibleIds = store.getVisibleIds();
 
@@ -70,6 +72,22 @@ export function PresupuestoEditor() {
     const selCapId = store.getSelectedCapituloId();
     store.copyAsIndependent(selCapId);
   }, [store]);
+
+  const handleCreateFolder = useCallback(() => {
+    setNewFolderName('');
+    setShowFolderModal(true);
+  }, []);
+
+  const handleConfirmFolder = useCallback(() => {
+    if (!newFolderName.trim()) return;
+    const parentId = store.getSelectedCapituloId();
+    const id = store.addConcepto(parentId, 'Capitulo');
+    // Direct set to avoid override tracking on new concepts
+    store.setConceptoDirectly(id, { descripcion: newFolderName.trim() });
+    if (parentId) store.expandId(parentId);
+    setShowFolderModal(false);
+    setNewFolderName('');
+  }, [newFolderName, store]);
 
   const grandTotal = store.getGrandTotal();
   const grandTotalInterno = store.getGrandTotalInterno();
@@ -193,7 +211,49 @@ export function PresupuestoEditor() {
         onChangeTipo={store.changeTipoSelected}
         onCopyAsComponent={handleCopyAsComponent}
         onCopyAsIndependent={handleCopyAsIndependent}
+        onCreateFolder={handleCreateFolder}
+        hasCapituloSelected={store.getSelectedCapituloId() !== null}
       />
+
+      {/* ── New folder modal ── */}
+      {showFolderModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowFolderModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-[360px] p-5">
+            <h2 className="text-sm font-bold text-slate-900 mb-3">Nueva carpeta</h2>
+            <p className="text-[11px] text-slate-500 mb-3">
+              {store.getSelectedCapituloId()
+                ? `Dentro de: ${store.conceptos[store.getSelectedCapituloId()!]?.descripcion}`
+                : 'En la raiz del presupuesto'
+              }
+            </p>
+            <input
+              type="text"
+              placeholder="Nombre de la carpeta..."
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              className="w-full px-3 py-2.5 text-sm rounded-lg border border-slate-300 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 placeholder-slate-400"
+              autoFocus
+              onKeyDown={e => { if (e.key === 'Enter') handleConfirmFolder(); if (e.key === 'Escape') setShowFolderModal(false); }}
+            />
+            <div className="flex items-center gap-2 mt-4">
+              <button
+                onClick={handleConfirmFolder}
+                disabled={!newFolderName.trim()}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Crear
+              </button>
+              <button
+                onClick={() => setShowFolderModal(false)}
+                className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Propagation dialog ── */}
       {store.pendingPropagation && (

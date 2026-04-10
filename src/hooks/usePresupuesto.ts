@@ -36,6 +36,15 @@ export function usePresupuesto() {
     });
   }, []);
 
+  const expandId = useCallback((id: string) => {
+    setExpandedIds(prev => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
   const expandTo = useCallback((id: string) => {
     // Expand all ancestors of an item so it becomes visible
     setExpandedIds(prev => {
@@ -167,6 +176,15 @@ export function usePresupuesto() {
           overrides: Object.keys(newOverrides).length > 0 ? newOverrides : undefined,
         },
       };
+    });
+  }, []);
+
+  // Direct update without override tracking (for initial setup of new concepts)
+  const setConceptoDirectly = useCallback((id: string, updates: Partial<ConceptoPresupuesto>) => {
+    setConceptos(prev => {
+      const c = prev[id];
+      if (!c) return prev;
+      return { ...prev, [id]: { ...c, ...updates } };
     });
   }, []);
 
@@ -843,12 +861,12 @@ export function usePresupuesto() {
   return {
     conceptos, rootIds,
     selectedIds, setSelectedIds,
-    expandedIds, toggleExpanded,
+    expandedIds, toggleExpanded, expandId,
     componentSources, pendingPropagation, setPendingPropagation,
     dropTargetId, setDropTargetId, dropPosition, setDropPosition,
     getVisibleIds,
     getTotal, getTotalInterno, getGrandTotal, getGrandTotalInterno,
-    updateConcepto, revertOverride,
+    updateConcepto, setConceptoDirectly, revertOverride,
     addConcepto, addFromBC3, addFromBC3WithTarget,
     deleteSelected, moveSelected, indentSelected, outdentSelected,
     pasteFromClipboard, changeTipoSelected,
