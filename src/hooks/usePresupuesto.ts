@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   ConceptoPresupuesto, NaturalezaConcepto, OverridableField,
@@ -12,11 +12,19 @@ const OVERRIDABLE_FIELDS: OverridableField[] = ['precioInterno', 'precioCliente'
 export function usePresupuesto() {
   const [conceptos, setConceptos] = useState<Record<string, ConceptoPresupuesto>>(createMockPresupuesto);
   const [rootIds, setRootIds] = useState<string[]>(mockRootIds);
+
+  // Refs to always read fresh state (avoids stale closure in drop handlers)
+  const conceptosRef = useRef(conceptos);
+  const rootIdsRef = useRef(rootIds);
+  useEffect(() => { conceptosRef.current = conceptos; }, [conceptos]);
+  useEffect(() => { rootIdsRef.current = rootIds; }, [rootIds]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [componentSources, setComponentSources] = useState<Record<string, ComponentSource>>({});
   const [pendingPropagation, setPendingPropagation] = useState<PendingPropagation | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+
 
   // ── Tree expand/collapse ──
 
@@ -242,104 +250,75 @@ export function usePresupuesto() {
 
   // ── Drag & Drop: add with target + auto-folder ──
 
-  const ensureCategoryFolder = useCallback((
-    prev: Record<string, ConceptoPresupuesto>,
-    parentId: string | null,
-    catCode: string,
-    catName: string,
-    currentRootIds: string[],
-  ): { next: Record<string, ConceptoPresupuesto>; folderId: string; newRootIds: string[] | null } => {
-    const siblings = parentId ? (prev[parentId]?.childrenIds ?? []) : currentRootIds;
-
-    // Check if folder already exists
-    const existing = siblings.find(sid => prev[sid]?.codigo === catCode);
-    if (existing) return { next: prev, folderId: existing, newRootIds: null };
-
-    // Create new folder
-    const folderId = uuidv4();
-    const parent = parentId ? prev[parentId] : null;
-    const nivel = parent ? parent.nivel + 1 : 0;
-
-    const folder: ConceptoPresupuesto = {
-      id: folderId, codigo: catCode, descripcion: catName,
-      tipo: 'Capitulo', unidad: '', cantidad: 0,
-      precioRef: 0, precioInterno: 0, precioCliente: 0,
-      parentId, childrenIds: [], nivel, orden: siblings.length,
-    };
-
-    const next = { ...prev, [folderId]: folder };
-    let newRootIds: string[] | null = null;
-
-    if (parentId && next[parentId]) {
-      next[parentId] = { ...next[parentId], childrenIds: [...next[parentId].childrenIds, folderId] };
-    } else {
-      newRootIds = [...currentRootIds, folderId];
-    }
-
-    return { next, folderId, newRootIds };
-  }, []);
 
   const addFromBC3WithTarget = useCallback((payload: BC3DragPayload, targetId: string | null, cantidad: number) => {
-    setConceptos(prev => {
-      let next = { ...prev };
-      let parentId: string | null;
+    // Build everything outside of setState, then apply atomically
+    const snap = conceptosRef.current;
+    const currentRoots = rootIdsRef.current;
 
-      if (targetId && next[targetId]?.tipo === 'Capitulo') {
-        parentId = targetId;
-      } else {
-        parentId = null;
-      }
+    let next = { ...snap };
+    let nextRootIds = [...currentRoots];
 
-      // Auto-create category folder
-      let updatedRootIds: string[] | null = null;
-      const { next: afterFolder, folderId, newRootIds } = ensureCategoryFolder(
-        next, parentId, payload.subCategoryCode, payload.subCategoryName, rootIds
-      );
-      next = afterFolder;
-      if (newRootIds) updatedRootIds = newRootIds;
-      parentId = folderId;
+    let parentId: string | null = null;
+    if (targetId && next[targetId]?.tipo === 'Capitulo') {
+      parentId = targetId;
+    }
 
-      // Create the item inside the folder
-      const newId = uuidv4();
-      const folderConcepto = next[parentId];
-      const nivel = folderConcepto ? folderConcepto.nivel + 1 : 0;
+    // Find or create category folder
+    const siblings = parentId ? (next[parentId]?.childrenIds ?? []) : nextRootIds;
+    const existing = siblings.find(sid => next[sid]?.codigo === payload.subCategoryCode);
+    let folderId: string;
 
-      next[newId] = {
-        id: newId, codigo: payload.item.codigo, descripcion: payload.item.descripcion,
-        tipo: 'Partida', unidad: payload.item.unidad, cantidad,
-        precioRef: payload.item.precio, precioInterno: payload.item.precio, precioCliente: payload.item.precio,
-        parentId, childrenIds: [], nivel,
-        orden: folderConcepto?.childrenIds.length ?? 0, codigoBC3: payload.item.codigo,
+    if (existing) {
+      folderId = existing;
+    } else {
+      folderId = uuidv4();
+      const parent = parentId ? next[parentId] : null;
+      const nivel = parent ? parent.nivel + 1 : 0;
+      next[folderId] = {
+        id: folderId, codigo: payload.subCategoryCode, descripcion: payload.subCategoryName,
+        tipo: 'Capitulo', unidad: '', cantidad: 0,
+        precioRef: 0, precioInterno: 0, precioCliente: 0,
+        parentId, childrenIds: [], nivel, orden: siblings.length,
       };
-
-      // Add to folder's children
-      if (next[parentId]) {
-        next[parentId] = { ...next[parentId], childrenIds: [...next[parentId].childrenIds, newId] };
+      if (parentId && next[parentId]) {
+        next[parentId] = { ...next[parentId], childrenIds: [...next[parentId].childrenIds, folderId] };
+      } else {
+        nextRootIds.push(folderId);
       }
+    }
 
-      if (updatedRootIds) {
-        setRootIds(updatedRootIds);
+    // Create the item
+    const newId = uuidv4();
+    const folderConcepto = next[folderId];
+    const itemNivel = folderConcepto ? folderConcepto.nivel + 1 : 0;
+
+    next[newId] = {
+      id: newId, codigo: payload.item.codigo, descripcion: payload.item.descripcion,
+      tipo: 'Partida', unidad: payload.item.unidad, cantidad,
+      precioRef: payload.item.precio, precioInterno: payload.item.precio, precioCliente: payload.item.precio,
+      parentId: folderId, childrenIds: [], nivel: itemNivel,
+      orden: folderConcepto?.childrenIds.length ?? 0, codigoBC3: payload.item.codigo,
+    };
+    next[folderId] = { ...next[folderId], childrenIds: [...next[folderId].childrenIds, newId] };
+
+    // Apply both atomically
+    setConceptos(next);
+    setRootIds(nextRootIds);
+
+    // Auto-expand path
+    setExpandedIds(prev => {
+      const expanded = new Set(prev);
+      if (targetId) expanded.add(targetId);
+      expanded.add(folderId);
+      let cur = next[folderId];
+      while (cur?.parentId) {
+        expanded.add(cur.parentId);
+        cur = next[cur.parentId];
       }
-
-      // Auto-expand the entire path so the new item is visible
-      setExpandedIds(prev => {
-        const expanded = new Set(prev);
-        // Expand the target (if it was a Capitulo)
-        if (targetId) expanded.add(targetId);
-        // Expand the auto-created folder
-        expanded.add(parentId!);
-        // Expand all ancestors up to root
-        let cur = next[parentId!];
-        while (cur?.parentId) {
-          expanded.add(cur.parentId);
-          cur = next[cur.parentId];
-        }
-        return expanded;
-      });
-
-      return next;
+      return expanded;
     });
-  }, [rootIds, ensureCategoryFolder]);
+  }, []);
 
   // ── Delete ──
 
@@ -696,6 +675,163 @@ export function usePresupuesto() {
     setPendingPropagation(null);
   }, [componentSources]);
 
+  // ── Move concepto via drag & drop ──
+
+  const moveConceptoTo = useCallback((dragId: string, targetId: string | null, position: 'inside' | 'before' | 'after') => {
+    if (dragId === targetId) return;
+    if (!targetId) return;
+
+    setConceptos(prev => {
+      const next = { ...prev };
+      const dragged = next[dragId];
+      if (!dragged) return prev;
+
+      // Get the ancestor chain of the dragged item (excluding itself)
+      // e.g. for "Fino de techo": [TERMINACION DE TECHOS, OBRA GRUESA, BLOQUE A, AZOTEA]
+      function getAncestorChain(id: string): ConceptoPresupuesto[] {
+        const chain: ConceptoPresupuesto[] = [];
+        let cur = next[id];
+        while (cur?.parentId) {
+          cur = next[cur.parentId];
+          if (cur) chain.push(cur);
+        }
+        return chain; // from immediate parent → root
+      }
+
+      // Find the destination Capitulo where the item should land
+      let destParentId: string;
+      if (position === 'inside') {
+        destParentId = targetId;
+      } else {
+        // before/after: destination is the target's parent
+        const target = next[targetId];
+        if (!target?.parentId) return prev; // can't reorder at root level for items
+        destParentId = target.parentId;
+      }
+
+      // Get ancestor descriptions of the dragged item (its parent chain of Capitulos)
+      // We skip the immediate parent of destParent up (those already exist in destination)
+      const dragParentChain = getAncestorChain(dragId);
+      // Only the Capitulo ancestors between the item and its "block-level" parent
+      const parentCaps = dragParentChain.filter(c => c.tipo === 'Capitulo');
+
+      // Ensure the ancestor chain exists at destination
+      // Walk from the destination down, matching by descripcion
+      function ensureAncestorChain(
+        parentId: string,
+        caps: ConceptoPresupuesto[] // ordered from immediate parent to higher ancestor
+      ): string {
+        // We only need ancestors between the item and its sibling-level at destination
+        // Find how many levels of the chain already exist at destination
+        // The chain is: [immediate parent cap, grandparent cap, ...]
+        // We need to recreate from the top down
+        // Reverse: from highest to lowest
+        const toCreate = [...caps].reverse();
+
+        // Find where the chain starts matching at destination
+        let currentParent = parentId;
+
+        for (const cap of toCreate) {
+          // Check if this cap already exists as child of currentParent
+          const existingChildren = next[currentParent]?.childrenIds ?? [];
+          const existing = existingChildren.find(
+            cid => next[cid]?.descripcion === cap.descripcion && next[cid]?.tipo === 'Capitulo'
+          );
+
+          if (existing) {
+            currentParent = existing;
+          } else {
+            // Create it
+            const newCapId = uuidv4();
+            const parentConcepto = next[currentParent];
+            const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            next[newCapId] = {
+              id: newCapId, codigo: cap.codigo, descripcion: cap.descripcion,
+              tipo: 'Capitulo', unidad: '', cantidad: 0,
+              precioRef: 0, precioInterno: 0, precioCliente: 0,
+              parentId: currentParent, childrenIds: [], nivel, orden: existingChildren.length,
+            };
+            next[currentParent] = {
+              ...next[currentParent],
+              childrenIds: [...next[currentParent].childrenIds, newCapId],
+            };
+            currentParent = newCapId;
+          }
+        }
+
+        return currentParent;
+      }
+
+      // Only ensure chain if dropping into a different parent than current
+      const sameParent = position === 'inside'
+        ? dragged.parentId === targetId
+        : dragged.parentId === next[targetId]?.parentId;
+
+      let finalParentId: string;
+
+      if (sameParent) {
+        // Simple reorder within same parent
+        finalParentId = position === 'inside' ? targetId : next[targetId]!.parentId!;
+      } else {
+        // Moving to different location — ensure ancestor chain
+        finalParentId = ensureAncestorChain(destParentId, parentCaps);
+      }
+
+      // 1. Remove from old parent
+      const oldParentId = dragged.parentId;
+      if (oldParentId && next[oldParentId]) {
+        next[oldParentId] = {
+          ...next[oldParentId],
+          childrenIds: next[oldParentId].childrenIds.filter(id => id !== dragId),
+        };
+      }
+      let newRoots: string[] | null = oldParentId ? null : rootIds.filter(id => id !== dragId);
+
+      // 2. Insert
+      if (sameParent && (position === 'before' || position === 'after')) {
+        // Simple reorder
+        const siblings = [...(next[finalParentId]?.childrenIds ?? [])];
+        const targetIdx = siblings.indexOf(targetId);
+        const offset = position === 'before' ? 0 : 1;
+        siblings.splice(targetIdx + offset, 0, dragId);
+        next[finalParentId] = { ...next[finalParentId], childrenIds: siblings };
+        next[dragId] = { ...dragged, parentId: finalParentId, nivel: next[finalParentId].nivel + 1 };
+      } else {
+        // Add to the end of the final parent
+        next[finalParentId] = {
+          ...next[finalParentId],
+          childrenIds: [...next[finalParentId].childrenIds, dragId],
+        };
+        next[dragId] = { ...dragged, parentId: finalParentId, nivel: next[finalParentId].nivel + 1 };
+      }
+
+      // Update children nivels recursively
+      function updateNivels(id: string, nivel: number) {
+        const c = next[id];
+        if (!c) return;
+        if (c.nivel !== nivel) next[id] = { ...c, nivel };
+        c.childrenIds.forEach(childId => updateNivels(childId, nivel + 1));
+      }
+      updateNivels(dragId, next[dragId].nivel);
+
+      if (newRoots) setRootIds(newRoots);
+
+      // Auto-expand the path
+      setExpandedIds(prev => {
+        const expanded = new Set(prev);
+        expanded.add(finalParentId);
+        let cur = next[finalParentId];
+        while (cur?.parentId) {
+          expanded.add(cur.parentId);
+          cur = next[cur.parentId];
+        }
+        return expanded;
+      });
+
+      return next;
+    });
+  }, [rootIds]);
+
   // ── Helpers ──
 
   const getSelectedCapituloId = useCallback((): string | null => {
@@ -709,14 +845,14 @@ export function usePresupuesto() {
     selectedIds, setSelectedIds,
     expandedIds, toggleExpanded,
     componentSources, pendingPropagation, setPendingPropagation,
-    dropTargetId, setDropTargetId,
+    dropTargetId, setDropTargetId, dropPosition, setDropPosition,
     getVisibleIds,
     getTotal, getTotalInterno, getGrandTotal, getGrandTotalInterno,
     updateConcepto, revertOverride,
     addConcepto, addFromBC3, addFromBC3WithTarget,
     deleteSelected, moveSelected, indentSelected, outdentSelected,
     pasteFromClipboard, changeTipoSelected,
-    copyAsComponent, copyAsIndependent, propagateComponentChange,
+    copyAsComponent, copyAsIndependent, propagateComponentChange, moveConceptoTo,
     getSelectedCapituloId,
   };
 }

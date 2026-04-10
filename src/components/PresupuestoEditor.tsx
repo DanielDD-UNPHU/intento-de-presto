@@ -4,19 +4,17 @@ import { BC3Panel } from './BC3Panel';
 import { FloatingToolbar } from './FloatingToolbar';
 import { PresupuestoGrid } from './PresupuestoGrid';
 import { PropagationDialog } from './PropagationDialog';
+import { AddBloqueNivelModal } from './AddBloqueNivelModal';
 import { formatMoney } from '../utils/formatters';
 import { parsePastedRows } from '../utils/formatters';
 import {
-  Plus, Undo2, Redo2, FileDown, Save,
-  LayoutGrid, TreePine, List, Building2, TrendingUp
+  Undo2, Redo2, FileDown, Save, Building2, TrendingUp
 } from 'lucide-react';
-
-type ViewMode = 'presupuesto' | 'arbol' | 'conceptos';
 
 export function PresupuestoEditor() {
   const store = usePresupuesto();
   const [bc3Open, setBc3Open] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('presupuesto');
+  const [showBloqueModal, setShowBloqueModal] = useState(false);
 
   const visibleIds = store.getVisibleIds();
 
@@ -32,15 +30,6 @@ export function PresupuestoEditor() {
       if (e.key === 'Delete' && store.selectedIds.size > 0) {
         e.preventDefault();
         store.deleteSelected();
-      }
-      if (e.key === 'Enter' && !e.shiftKey && store.selectedIds.size === 0) {
-        const active = document.activeElement;
-        if (active?.tagName !== 'INPUT' && active?.tagName !== 'TEXTAREA') {
-          e.preventDefault();
-          // Add at root, or inside selected Capitulo
-          const selCapId = store.getSelectedCapituloId();
-          store.addConcepto(selCapId);
-        }
       }
       if (e.key === 'Escape') store.setSelectedIds(new Set());
       if (e.key === 'Tab' && store.selectedIds.size > 0) {
@@ -70,14 +59,6 @@ export function PresupuestoEditor() {
     };
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [store]);
-
-  const handleAddRow = useCallback(() => {
-    const lastSelected = store.selectedIds.size > 0
-      ? Array.from(store.selectedIds).pop()
-      : undefined;
-    const selCapId = store.getSelectedCapituloId();
-    store.addConcepto(selCapId, 'Partida', lastSelected);
   }, [store]);
 
   const handleCopyAsComponent = useCallback(() => {
@@ -156,41 +137,17 @@ export function PresupuestoEditor() {
       {/* ── Sub-toolbar ── */}
       <div className="bg-white border-b border-slate-200/60 px-5 py-1.5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex items-center bg-slate-100/80 rounded-lg p-[3px]">
-            {([
-              { key: 'presupuesto', icon: LayoutGrid, label: 'Presupuesto' },
-              { key: 'arbol', icon: TreePine, label: 'Arbol' },
-              { key: 'conceptos', icon: List, label: 'Conceptos' },
-            ] as const).map(({ key, icon: Icon, label }) => (
-              <button
-                key={key}
-                onClick={() => setViewMode(key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[11px] font-semibold transition-all duration-150 ${
-                  viewMode === key
-                    ? 'bg-white text-slate-800 shadow-sm shadow-slate-200/80'
-                    : 'text-slate-400 hover:text-slate-600'
-                }`}
-              >
-                <Icon size={12} strokeWidth={2.5} /> {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
           <button
-            onClick={handleAddRow}
+            onClick={() => setShowBloqueModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200/50"
           >
-            <Plus size={13} strokeWidth={2.5} /> Nueva fila
+            <Building2 size={13} strokeWidth={2.5} /> Bloques y Niveles
           </button>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num">
-            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{Object.keys(store.conceptos).length}</span>
-            <span>conceptos</span>
-            <span className="text-slate-300">·</span>
-            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{visibleIds.length}</span>
-            <span>visibles</span>
-          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono-num">
+          <span className="px-1.5 py-0.5 bg-slate-100 rounded text-slate-500 font-semibold">{visibleIds.length}</span>
+          <span>items</span>
         </div>
       </div>
 
@@ -205,6 +162,7 @@ export function PresupuestoEditor() {
         <div className="flex-1 flex flex-col min-w-0 bg-white">
           <PresupuestoGrid
             visibleIds={visibleIds}
+            rootIds={store.rootIds}
             conceptos={store.conceptos}
             selectedIds={store.selectedIds}
             expandedIds={store.expandedIds}
@@ -213,8 +171,11 @@ export function PresupuestoEditor() {
             onUpdate={store.updateConcepto}
             onRevertOverride={store.revertOverride}
             onDropBC3={store.addFromBC3WithTarget}
+            onMoveRow={store.moveConceptoTo}
             dropTargetId={store.dropTargetId}
             onSetDropTarget={store.setDropTargetId}
+            dropPosition={store.dropPosition}
+            onSetDropPosition={store.setDropPosition}
             getTotal={store.getTotal}
             getTotalInterno={store.getTotalInterno}
           />
@@ -243,6 +204,26 @@ export function PresupuestoEditor() {
           componentSources={store.componentSources}
           onPropagate={store.propagateComponentChange}
           onClose={() => store.setPendingPropagation(null)}
+        />
+      )}
+
+      {/* ── Bloque/Nivel modal ── */}
+      {showBloqueModal && (
+        <AddBloqueNivelModal
+          conceptos={store.conceptos}
+          rootIds={store.rootIds}
+          onAddBloque={(nombre, codigo) => {
+            // Create a root-level Capitulo for the bloque
+            const id = store.addConcepto(null, 'Capitulo');
+            store.updateConcepto(id, { descripcion: nombre, codigo: `BLQ-${codigo}` });
+          }}
+          onAddNivel={(bloqueId, nombre, numero) => {
+            // Create a child Capitulo under the bloque
+            const id = store.addConcepto(bloqueId, 'Capitulo');
+            store.updateConcepto(id, { descripcion: nombre, codigo: numero < 0 ? `S${Math.abs(numero)}` : numero === 0 ? 'PB' : `N${numero}` });
+            store.toggleExpanded(bloqueId);
+          }}
+          onClose={() => setShowBloqueModal(false)}
         />
       )}
     </div>

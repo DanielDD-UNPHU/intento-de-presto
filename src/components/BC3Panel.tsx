@@ -1,10 +1,11 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { mockBC3 } from '../data/mockBC3';
-import type { BC3Item, BC3DragPayload, BC3SubCategoria, BC3Categoria } from '../types';
+import type { BC3Item, BC3DragPayload, BC3Data } from '../types';
 import { formatMoney } from '../utils/formatters';
+import { parseBC3File } from '../utils/bc3Parser';
 import {
   Search, ChevronRight, ChevronDown, Plus, Upload, Database, X, Package,
-  GripVertical, Trash2
+  GripVertical, Trash2, FileUp, CheckCircle2
 } from 'lucide-react';
 
 const UNIDADES = [
@@ -66,9 +67,40 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
   const [addingItem, setAddingItem] = useState<BC3Item | null>(null);
   const [cantidad, setCantidad] = useState('1');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Loaded BC3 data (from file upload or mock)
+  const [loadedBC3, setLoadedBC3] = useState<BC3Data | null>(null);
+  const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
+  const baseData = loadedBC3 ?? mockBC3;
 
   // Custom items added by the user, keyed by subcategory codigo
   const [customItems, setCustomItems] = useState<Record<string, BC3Item[]>>({});
+
+  // Handle BC3 file upload
+  const handleFileUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const content = evt.target?.result as string;
+      try {
+        const parsed = parseBC3File(content);
+        setLoadedBC3(parsed);
+        setLoadedFileName(file.name);
+        setCustomItems({});
+        setExpandedCats(new Set());
+        setExpandedSubs(new Set());
+      } catch (err) {
+        console.error('Error parsing BC3:', err);
+      }
+    };
+    reader.readAsText(file, 'latin1');
+
+    // Reset input so same file can be re-uploaded
+    e.target.value = '';
+  }, []);
 
   // Inline form for creating new custom item
   const [creatingIn, setCreatingIn] = useState<{ catCode: string; catName: string; subCode: string; subName: string } | null>(null);
@@ -78,7 +110,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
 
   // Merge base BC3 + custom items
   const mergedData = useMemo((): BC3Categoria[] => {
-    return mockBC3.categories.map(cat => ({
+    return baseData.categories.map(cat => ({
       ...cat,
       children: cat.children.map(sub => ({
         ...sub,
@@ -146,7 +178,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
     if (!creatingIn || !newItemDesc.trim()) return;
 
     // Get all items in this subcategory (base + custom) to generate next code
-    const baseSub = mockBC3.categories
+    const baseSub = baseData.categories
       .flatMap(c => c.children)
       .find(s => s.codigo === creatingIn.subCode);
     const allItems = [...(baseSub?.items ?? []), ...(customItems[creatingIn.subCode] ?? [])];
@@ -207,7 +239,18 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
             </div>
           </div>
           <div className="flex items-center gap-0.5">
-            <button className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors" title="Importar .bc3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".bc3,.BC3"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 rounded-md text-slate-500 hover:text-cyan-400 hover:bg-cyan-500/10 transition-colors"
+              title="Importar archivo .bc3"
+            >
               <Upload size={12} />
             </button>
             <button onClick={onToggle} className="p-1.5 rounded-md text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors">
@@ -384,10 +427,23 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
 
       {/* Footer */}
       <div className="relative z-10 px-3 py-2 border-t border-slate-800">
-        <div className="text-[9px] text-slate-600 flex items-center gap-1.5">
-          <span className="w-1 h-1 rounded-full bg-emerald-500" />
-          Precios de Referencia — Rep. Dominicana
-        </div>
+        {loadedFileName ? (
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 size={10} className="text-emerald-400" />
+            <span className="text-[9px] text-emerald-400 font-medium truncate">{loadedFileName}</span>
+            <button
+              onClick={() => { setLoadedBC3(null); setLoadedFileName(null); setCustomItems({}); }}
+              className="ml-auto text-[9px] text-slate-600 hover:text-slate-400"
+            >
+              Quitar
+            </button>
+          </div>
+        ) : (
+          <div className="text-[9px] text-slate-600 flex items-center gap-1.5">
+            <span className="w-1 h-1 rounded-full bg-emerald-500" />
+            Mock data — Sube un .bc3 para datos reales
+          </div>
+        )}
       </div>
 
       {/* Modal: Crear item custom */}
@@ -425,7 +481,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
                 <span className="text-[10px] text-slate-400 font-medium">Codigo</span>
                 <span className="text-[12px] font-mono-num font-bold text-emerald-600">
                   {(() => {
-                    const baseSub = mockBC3.categories.flatMap(c => c.children).find(s => s.codigo === creatingIn.subCode);
+                    const baseSub = baseData.categories.flatMap(c => c.children).find(s => s.codigo === creatingIn.subCode);
                     const allItems = [...(baseSub?.items ?? []), ...(customItems[creatingIn.subCode] ?? [])];
                     return generateNextCode(creatingIn.subCode, allItems);
                   })()}

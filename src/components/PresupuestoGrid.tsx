@@ -6,6 +6,7 @@ import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2 } from 'lucide-
 
 interface Props {
   visibleIds: string[];
+  rootIds: string[];
   conceptos: Record<string, ConceptoPresupuesto>;
   selectedIds: Set<string>;
   expandedIds: Set<string>;
@@ -14,8 +15,11 @@ interface Props {
   onUpdate: (id: string, updates: Partial<ConceptoPresupuesto>) => void;
   onRevertOverride: (id: string, field: OverridableField) => void;
   onDropBC3: (payload: BC3DragPayload, targetId: string | null, cantidad: number) => void;
+  onMoveRow: (dragId: string, targetId: string | null, position: 'inside' | 'before' | 'after') => void;
   dropTargetId: string | null;
   onSetDropTarget: (id: string | null) => void;
+  dropPosition: 'before' | 'after' | 'inside' | null;
+  onSetDropPosition: (pos: 'before' | 'after' | 'inside' | null) => void;
   getTotal: (id: string) => number;
   getTotalInterno: (id: string) => number;
 }
@@ -23,16 +27,36 @@ interface Props {
 type EditableField = 'codigo' | 'descripcion' | 'unidad' | 'cantidad' | 'precioRef' | 'precioInterno' | 'precioCliente';
 
 const NUMERIC_FIELDS: EditableField[] = ['cantidad', 'precioRef', 'precioInterno', 'precioCliente'];
-const COL_TEMPLATE = '42px 36px 84px 1fr 48px 96px 96px 96px 96px 120px';
+const COL_TEMPLATE = '42px 36px 84px 1fr 48px 120px 120px 120px 120px 140px';
+
+// Generate display code based on position in tree (e.g. "1.2.3")
+function buildAutoCode(id: string, conceptos: Record<string, ConceptoPresupuesto>, rootIds: string[]): string {
+  const c = conceptos[id];
+  if (!c) return '';
+
+  const indices: number[] = [];
+  let current: ConceptoPresupuesto | undefined = c;
+  while (current) {
+    const siblings = current.parentId
+      ? conceptos[current.parentId]?.childrenIds ?? []
+      : rootIds;
+    indices.unshift(siblings.indexOf(current.id) + 1);
+    current = current.parentId ? conceptos[current.parentId] : undefined;
+  }
+
+  return indices.join('.');
+}
 
 export function PresupuestoGrid({
-  visibleIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
-  onRevertOverride, onDropBC3, dropTargetId, onSetDropTarget,
-  getTotal, getTotalInterno,
+  visibleIds, rootIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
+  onRevertOverride, onDropBC3, onMoveRow, dropTargetId, onSetDropTarget,
+  dropPosition, onSetDropPosition, getTotal, getTotalInterno,
 }: Props) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [dragStart, setDragStart] = useState<number | null>(null);
+  const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
+  const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -85,25 +109,36 @@ export function PresupuestoGrid({
       newSet.has(visibleIds[idx]) ? newSet.delete(visibleIds[idx]) : newSet.add(visibleIds[idx]);
       onSelect(newSet);
     } else {
-      // Toggle: click on already-selected row deselects it
-      if (selectedIds.size === 1 && selectedIds.has(visibleIds[idx])) {
-        onSelect(new Set());
+      const isAlreadySelected = selectedIds.has(visibleIds[idx]);
+      setDragStart(idx);
+      setDragMode(isAlreadySelected ? 'deselect' : 'select');
+
+      if (isAlreadySelected) {
+        const newSet = new Set(selectedIds);
+        newSet.delete(visibleIds[idx]);
+        onSelect(newSet);
       } else {
-        setDragStart(idx);
         onSelect(new Set([visibleIds[idx]]));
       }
     }
   }, [visibleIds, selectedIds, onSelect]);
 
   const handleRowMouseEnter = useCallback((idx: number) => {
-    if (dragStart !== null) {
-      const start = Math.min(dragStart, idx);
-      const end = Math.max(dragStart, idx);
+    if (dragStart === null) return;
+    const start = Math.min(dragStart, idx);
+    const end = Math.max(dragStart, idx);
+
+    if (dragMode === 'select') {
       const newSet = new Set<string>();
       for (let i = start; i <= end; i++) newSet.add(visibleIds[i]);
       onSelect(newSet);
+    } else {
+      // Deselect mode: remove the dragged range from current selection
+      const newSet = new Set(selectedIds);
+      for (let i = start; i <= end; i++) newSet.delete(visibleIds[i]);
+      onSelect(newSet);
     }
-  }, [dragStart, visibleIds, onSelect]);
+  }, [dragStart, dragMode, visibleIds, selectedIds, onSelect]);
 
   useEffect(() => {
     const handleMouseUp = () => setDragStart(null);
@@ -141,29 +176,102 @@ export function PresupuestoGrid({
     }
   }, [conceptos, onToggleExpand, startEdit]);
 
-  // Drop handlers
+  // Get root ancestor (nivel 0) of any concept
+  const getRootOf = useCallback((id: string): string | null => {
+    let current = conceptos[id];
+    while (current?.parentId) current = conceptos[current.parentId];
+    return current?.id ?? null;
+  }, [conceptos]);
+
+  // Check if a row drag can drop on a target
+  const canRowDropOn = useCallback((targetId: string): boolean => {
+    if (!draggingRowId) return false;
+    if (draggingRowId === targetId) return false;
+    const drag = conceptos[draggingRowId];
+    const target = conceptos[targetId];
+    if (!drag || !target) return false;
+    // Can't drop on own descendant
+    let check: ConceptoPresupuesto | undefined = target;
+    while (check?.parentId) {
+      if (check.parentId === draggingRowId) return false;
+      check = conceptos[check.parentId];
+    }
+    // Can drop INTO any Capitulo, or reorder among siblings
+    if (target.tipo === 'Capitulo') return true;
+    if (target.parentId === drag.parentId) return true;
+    return false;
+  }, [draggingRowId, conceptos]);
+
+  // Drop handlers — supports BC3 items and internal row reordering
   const handleDragOver = useCallback((e: React.DragEvent, targetId: string | null) => {
-    if (e.dataTransfer.types.includes('application/x-bc3-item')) {
+    const isBC3 = e.dataTransfer.types.includes('application/x-bc3-item');
+    const isRow = e.dataTransfer.types.includes('application/x-row-id');
+
+    if (isBC3) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
       if (targetId !== dropTargetId) onSetDropTarget(targetId);
+      onSetDropPosition('inside');
+    } else if (isRow && targetId) {
+      if (canRowDropOn(targetId)) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        if (targetId !== dropTargetId) onSetDropTarget(targetId);
+
+        // Determine position based on cursor Y within the row
+        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        const target = conceptos[targetId];
+
+        if (target?.tipo === 'Capitulo') {
+          // For chapters: top third = before, middle = inside, bottom third = after
+          if (y < rect.height * 0.3) onSetDropPosition('before');
+          else if (y > rect.height * 0.7) onSetDropPosition('after');
+          else onSetDropPosition('inside');
+        } else {
+          // For items: top half = before, bottom half = after
+          onSetDropPosition(y < rect.height / 2 ? 'before' : 'after');
+        }
+      } else {
+        onSetDropTarget(null);
+        onSetDropPosition(null);
+      }
     }
-  }, [dropTargetId, onSetDropTarget]);
+  }, [dropTargetId, onSetDropTarget, onSetDropPosition, canRowDropOn, conceptos]);
 
   const handleDragLeave = useCallback(() => {
     onSetDropTarget(null);
-  }, [onSetDropTarget]);
+    onSetDropPosition(null);
+  }, [onSetDropTarget, onSetDropPosition]);
 
   const handleDrop = useCallback((e: React.DragEvent, targetId: string | null) => {
     e.preventDefault();
+    const pos = dropPosition;
     onSetDropTarget(null);
-    const data = e.dataTransfer.getData('application/x-bc3-item');
-    if (!data) return;
-    try {
-      const payload: BC3DragPayload = JSON.parse(data);
-      onDropBC3(payload, targetId, 1);
-    } catch { /* ignore bad data */ }
-  }, [onDropBC3, onSetDropTarget]);
+    onSetDropPosition(null);
+
+    // BC3 catalog drop
+    const bc3Data = e.dataTransfer.getData('application/x-bc3-item');
+    if (bc3Data) {
+      try {
+        const payload: BC3DragPayload = JSON.parse(bc3Data);
+        onDropBC3(payload, targetId, 1);
+      } catch { /* ignore */ }
+      return;
+    }
+
+    // Internal row move
+    const rowId = e.dataTransfer.getData('application/x-row-id');
+    if (rowId && targetId && rowId !== targetId && pos) {
+      if (pos === 'inside') {
+        onMoveRow(rowId, targetId, 'inside');
+      } else if (pos === 'before') {
+        onMoveRow(rowId, targetId, 'before');
+      } else if (pos === 'after') {
+        onMoveRow(rowId, targetId, 'after');
+      }
+    }
+  }, [onDropBC3, onMoveRow, onSetDropTarget, onSetDropPosition, dropPosition]);
 
   // Cell renderer
   const renderCell = (id: string, field: EditableField, extraClass: string = '') => {
@@ -276,49 +384,58 @@ export function PresupuestoGrid({
           const isComponentInstance = !!c.componentSourceId;
           const isComponentSource = !!c.isComponentSource;
 
-          const canDrop = isChapter;
+          // For BC3 drops, only Capitulos can receive. For row moves, all rows are valid targets.
+          const canDrop = isChapter; // BC3: only folders. Row drag shows blue line on all.
 
           // Nivel-based backgrounds + left border color
           const nivelStyles = [
-            { bg: 'bg-white',          border: '' },
-            { bg: 'bg-blue-50/60',     border: 'border-l-4 border-l-blue-500' },
-            { bg: 'bg-emerald-50/50',  border: 'border-l-4 border-l-emerald-500' },
-            { bg: 'bg-amber-50/50',    border: 'border-l-4 border-l-amber-500' },
+            { bg: 'bg-white',          border: '',                                hover: 'hover:bg-slate-50' },
+            { bg: 'bg-blue-50/60',     border: 'border-l-4 border-l-blue-500',    hover: 'hover:bg-blue-100/50' },
+            { bg: 'bg-emerald-50/50',  border: 'border-l-4 border-l-emerald-500', hover: 'hover:bg-emerald-100/50' },
+            { bg: 'bg-amber-50/50',    border: 'border-l-4 border-l-amber-500',   hover: 'hover:bg-amber-100/50' },
           ];
           const ns = nivelStyles[Math.min(c.nivel, nivelStyles.length - 1)];
           const nivelBg = ns.bg;
           const nivelBorder = ns.border;
+          const nivelHover = ns.hover;
 
           return (
             <div
               key={id}
               className={`grid border-b transition-all duration-75 relative ${
-                isDropTarget && canDrop
+                isDropTarget
                   ? 'bg-blue-100/80 border-blue-200'
-                  : isDropTarget && !canDrop
-                    ? 'bg-red-50/60 border-red-200'
-                    : isSelected
-                      ? 'bg-blue-50/80 border-blue-100'
-                      : isChapter
-                        ? `${nivelBg} ${nivelBorder} border-slate-100 hover:bg-slate-100/50`
-                        : `${nivelBg} ${nivelBorder} border-slate-100/60 row-hover-glow`
+                  : isSelected
+                    ? 'bg-blue-50/80 border-blue-100'
+                    : isChapter
+                      ? `${nivelBg} ${nivelBorder} border-slate-100 ${nivelHover}`
+                      : `${nivelBg} ${nivelBorder} border-slate-100/60 ${nivelHover}`
               }`}
               style={{ gridTemplateColumns: COL_TEMPLATE, height: 34 }}
+              draggable={!isChapter}
+              onDragStart={!isChapter ? e => {
+                e.dataTransfer.setData('application/x-row-id', id);
+                e.dataTransfer.effectAllowed = 'move';
+                setDraggingRowId(id);
+              } : undefined}
+              onDragEnd={() => { setDraggingRowId(null); onSetDropTarget(null); }}
               onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
               onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}
             >
-              {/* Drop indicator line — blue for folders, red for invalid */}
-              {isDropTarget && (
-                <div className={`absolute -top-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full ${
-                  canDrop
-                    ? 'bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]'
-                    : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.5)]'
-                }`}>
-                  <div className={`absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow ${
-                    canDrop ? 'bg-blue-500' : 'bg-red-500'
-                  }`} />
+              {/* Drop indicator line — top, bottom, or full highlight for inside */}
+              {isDropTarget && dropPosition === 'before' && (
+                <div className="absolute -top-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]">
+                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow bg-blue-500" />
                 </div>
+              )}
+              {isDropTarget && dropPosition === 'after' && (
+                <div className="absolute -bottom-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]">
+                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow bg-blue-500" />
+                </div>
+              )}
+              {isDropTarget && dropPosition === 'inside' && (
+                <div className="absolute inset-0 z-20 pointer-events-none rounded border-2 border-blue-400 border-dashed bg-blue-100/30" />
               )}
 
               {/* Selection stripe */}
@@ -355,11 +472,13 @@ export function PresupuestoGrid({
                 )}
               </div>
 
-              {/* Codigo */}
+              {/* Codigo — auto-generated from tree position */}
               <div className="border-r border-slate-100/60">
-                <div className="flex items-center h-full gap-0.5">
-                  {isComponentInstance && <Link2 size={9} className="text-cyan-400 ml-1 shrink-0" />}
-                  {renderCell(id, 'codigo', 'font-mono-num text-slate-500')}
+                <div className="flex items-center h-full gap-0.5 px-2">
+                  {isComponentInstance && <Link2 size={9} className="text-cyan-400 shrink-0" />}
+                  <span className="text-[11px] font-mono-num text-slate-400 truncate">
+                    {buildAutoCode(id, conceptos, rootIds)}
+                  </span>
                 </div>
               </div>
 

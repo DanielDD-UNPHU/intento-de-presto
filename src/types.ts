@@ -27,6 +27,10 @@ export interface ConceptoPresupuesto {
   orden: number;
   codigoBC3?: string;
 
+  // Block/Level assignment — root chapters belong to a bloque+nivel
+  bloqueId?: string;
+  nivelId?: string;
+
   // Override tracking — stores ORIGINAL values. Current value on concept IS the override.
   overrides?: FieldOverrides;
 
@@ -75,4 +79,19 @@ export interface ComponentSource {
 export interface PendingPropagation {
   sourceId: string;
   changedFields: OverridableField[];
+}
+
+// Project structure: Blocks and Levels
+export interface Bloque {
+  id: string;
+  nombre: string;       // "Torre A", "Bloque B"
+  codigo: string;       // "A", "B"
+  niveles: Nivel[];
+}
+
+export interface Nivel {
+  id: string;
+  bloqueId: string;
+  numero: number;       // -1 (sótano), 0 (PB), 1, 2, ... 20
+  nombre: string;       // "Sótano 1", "Nivel 1", "Nivel 2", "Azotea"
 }
