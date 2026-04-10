@@ -186,6 +186,34 @@ export function PresupuestoGrid({
     return current?.id ?? null;
   }, [conceptos]);
 
+  // Get the BC3 category chain of a concept (walk up to find A04#, A0402# etc)
+  const getBC3Chain = useCallback((id: string): { subCat: string | null; subSubCat: string | null } => {
+    // Walk up from the item to find its BC3 category parents by codigo pattern
+    let subCat: string | null = null;
+    let subSubCat: string | null = null;
+    let walk = conceptos[id];
+    while (walk) {
+      const code = walk.codigo;
+      // SubSubCategory: 4+ digits + # (e.g. A0402#)
+      if (code.endsWith('#') && code.length >= 6) subSubCat = code;
+      // SubCategory: 2 digits + # (e.g. A04#) — letter + 2 digits + #
+      else if (code.endsWith('#') && code.length >= 4 && code.length <= 5) subCat = code;
+      walk = walk.parentId ? conceptos[walk.parentId] : undefined;
+    }
+    return { subCat, subSubCat };
+  }, [conceptos]);
+
+  // Check if a concept is a Bloque (direct child of a root Nivel)
+  const isBloque = useCallback((id: string): boolean => {
+    const c = conceptos[id];
+    return !!(c?.parentId && !conceptos[c.parentId]?.parentId);
+  }, [conceptos]);
+
+  // Check if a concept is a Nivel (root level, no parent)
+  const isNivel = useCallback((id: string): boolean => {
+    return !conceptos[id]?.parentId;
+  }, [conceptos]);
+
   // Check if a row drag can drop on a target
   const canRowDropOn = useCallback((targetId: string): boolean => {
     if (!draggingRowId) return false;
@@ -193,17 +221,36 @@ export function PresupuestoGrid({
     const drag = conceptos[draggingRowId];
     const target = conceptos[targetId];
     if (!drag || !target) return false;
+
     // Can't drop on own descendant
     let check: ConceptoPresupuesto | undefined = target;
     while (check?.parentId) {
       if (check.parentId === draggingRowId) return false;
       check = conceptos[check.parentId];
     }
-    // Can drop INTO any Capitulo, or reorder among siblings
-    if (target.tipo === 'Capitulo') return true;
+
+    // Reorder among siblings is always OK
     if (target.parentId === drag.parentId) return true;
+
+    // Can drop on a Nivel or Bloque (item will auto-organize)
+    if (target.tipo === 'Capitulo') {
+      if (isNivel(targetId) || isBloque(targetId)) return true;
+
+      // For other Capitulos, only allow if same BC3 category
+      const dragChain = getBC3Chain(draggingRowId);
+      const targetCode = target.codigo;
+
+      // Target is a BC3 category — check if it matches the dragged item's chain
+      if (dragChain.subCat && targetCode === dragChain.subCat) return true;
+      if (dragChain.subSubCat && targetCode === dragChain.subSubCat) return true;
+
+      // Target contains the right category as a child
+      // (e.g. target is a bloque-like structure that has A04# inside)
+      return false;
+    }
+
     return false;
-  }, [draggingRowId, conceptos]);
+  }, [draggingRowId, conceptos, isNivel, isBloque, getBC3Chain]);
 
   // Drop handlers — supports BC3 items and internal row reordering
   const handleDragOver = useCallback((e: React.DragEvent, targetId: string | null) => {

@@ -734,39 +734,28 @@ export function usePresupuesto() {
         destParentId = target.parentId;
       }
 
-      // Get ancestor descriptions of the dragged item (its parent chain of Capitulos)
-      // We skip the immediate parent of destParent up (those already exist in destination)
+      // Get only the BC3 category ancestors (those with # in codigo)
+      // e.g. for "Ceramica europea": [A0901# PISOS, A09# PISOS]
       const dragParentChain = getAncestorChain(dragId);
-      // Only the Capitulo ancestors between the item and its "block-level" parent
-      const parentCaps = dragParentChain.filter(c => c.tipo === 'Capitulo');
+      const bc3Caps = dragParentChain.filter(c =>
+        c.tipo === 'Capitulo' && c.codigo.endsWith('#')
+      );
 
-      // Ensure the ancestor chain exists at destination
-      // Walk from the destination down, matching by descripcion
-      function ensureAncestorChain(
-        parentId: string,
-        caps: ConceptoPresupuesto[] // ordered from immediate parent to higher ancestor
-      ): string {
-        // We only need ancestors between the item and its sibling-level at destination
-        // Find how many levels of the chain already exist at destination
-        // The chain is: [immediate parent cap, grandparent cap, ...]
-        // We need to recreate from the top down
-        // Reverse: from highest to lowest
-        const toCreate = [...caps].reverse();
-
-        // Find where the chain starts matching at destination
+      // Ensure BC3 folder chain exists at destination, matching by CODIGO
+      function ensureBC3Chain(parentId: string): string {
+        // bc3Caps is [immediate parent, grandparent, ...] — reverse to create top-down
+        const toCreate = [...bc3Caps].reverse();
         let currentParent = parentId;
 
         for (const cap of toCreate) {
-          // Check if this cap already exists as child of currentParent
           const existingChildren = next[currentParent]?.childrenIds ?? [];
           const existing = existingChildren.find(
-            cid => next[cid]?.descripcion === cap.descripcion && next[cid]?.tipo === 'Capitulo'
+            cid => next[cid]?.codigo === cap.codigo
           );
 
           if (existing) {
             currentParent = existing;
           } else {
-            // Create it
             const newCapId = uuidv4();
             const parentConcepto = next[currentParent];
             const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
@@ -799,7 +788,7 @@ export function usePresupuesto() {
         finalParentId = position === 'inside' ? targetId : next[targetId]!.parentId!;
       } else {
         // Moving to different location — ensure ancestor chain
-        finalParentId = ensureAncestorChain(destParentId, parentCaps);
+        finalParentId = ensureBC3Chain(destParentId);
       }
 
       // 1. Remove from old parent
