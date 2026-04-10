@@ -47,10 +47,16 @@ export interface BC3Item {
   isCustom?: boolean; // Created by the company user, not from superadmin catalog
 }
 
-export interface BC3SubCategoria {
+export interface BC3SubSubCategoria {
   codigo: string;
   nombre: string;
   items: BC3Item[];
+}
+
+export interface BC3SubCategoria {
+  codigo: string;
+  nombre: string;
+  children: BC3SubSubCategoria[];
 }
 
 export interface BC3Categoria {

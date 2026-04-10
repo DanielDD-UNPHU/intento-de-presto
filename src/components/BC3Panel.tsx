@@ -65,6 +65,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
   const [search, setSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
+  const [expandedSubSubs, setExpandedSubSubs] = useState<Set<string>>(new Set());
   const [addingItem, setAddingItem] = useState<BC3Item | null>(null);
   const [cantidad, setCantidad] = useState('1');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -108,13 +109,16 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
   const [newItemUnidad, setNewItemUnidad] = useState('');
   const [newItemPrecio, setNewItemPrecio] = useState('');
 
-  // Merge base BC3 + custom items
-  const mergedData = useMemo((): BC3Categoria[] => {
+  // Merge base BC3 + custom items (keyed by sub-sub-category codigo)
+  const mergedData = useMemo(() => {
     return baseData.categories.map(cat => ({
       ...cat,
       children: cat.children.map(sub => ({
         ...sub,
-        items: [...sub.items, ...(customItems[sub.codigo] ?? [])],
+        children: sub.children.map(subsub => ({
+          ...subsub,
+          items: [...subsub.items, ...(customItems[subsub.codigo] ?? [])],
+        })),
       })),
     }));
   }, [customItems, baseData]);
@@ -128,26 +132,35 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
         children: cat.children
           .map(sub => ({
             ...sub,
-            items: sub.items.filter(
-              item => item.codigo.toLowerCase().includes(q) || item.descripcion.toLowerCase().includes(q)
-            ),
+            children: sub.children
+              .map(subsub => ({
+                ...subsub,
+                items: subsub.items.filter(
+                  item => item.codigo.toLowerCase().includes(q) || item.descripcion.toLowerCase().includes(q)
+                ),
+              }))
+              .filter(subsub => subsub.items.length > 0),
           }))
-          .filter(sub => sub.items.length > 0),
+          .filter(sub => sub.children.length > 0),
       }))
       .filter(cat => cat.children.length > 0);
 
-    // Auto-expand all categories/subcategories that have results
     if (search.trim()) {
       const newCats = new Set<string>();
       const newSubs = new Set<string>();
+      const newSubSubs = new Set<string>();
       for (const cat of filtered) {
         newCats.add(cat.codigo);
         for (const sub of cat.children) {
           newSubs.add(sub.codigo);
+          for (const subsub of sub.children) {
+            newSubSubs.add(subsub.codigo);
+          }
         }
       }
       setExpandedCats(newCats);
       setExpandedSubs(newSubs);
+      setExpandedSubSubs(newSubSubs);
     }
 
     return filtered;
@@ -163,6 +176,14 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
 
   const toggleSub = (codigo: string) => {
     setExpandedSubs(prev => {
+      const next = new Set(prev);
+      next.has(codigo) ? next.delete(codigo) : next.add(codigo);
+      return next;
+    });
+  };
+
+  const toggleSubSub = (codigo: string) => {
+    setExpandedSubSubs(prev => {
       const next = new Set(prev);
       next.has(codigo) ? next.delete(codigo) : next.add(codigo);
       return next;
@@ -286,10 +307,11 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
         </div>
       </div>
 
-      {/* Tree */}
+      {/* Tree — 4 levels: Categoria > SubCategoria > SubSubCategoria > Item */}
       <div className="relative z-10 flex-1 overflow-y-auto px-1">
         {filteredData.map(cat => (
           <div key={cat.codigo}>
+            {/* Level 0: A#, M#, etc. */}
             <button
               onClick={() => toggleCat(cat.codigo)}
               className="w-full flex items-center gap-1.5 px-2 py-2 text-left rounded-md hover:bg-white/5 transition-colors group"
@@ -304,83 +326,100 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
 
             {expandedCats.has(cat.codigo) && cat.children.map(sub => (
               <div key={sub.codigo} className="ml-2">
-                <div className="flex items-center">
-                  <button
-                    onClick={() => toggleSub(sub.codigo)}
-                    className="flex-1 flex items-center gap-1.5 px-2 py-1.5 text-left rounded-md hover:bg-white/5 transition-colors group"
-                  >
-                    {expandedSubs.has(sub.codigo)
-                      ? <ChevronDown size={11} className="text-slate-600 shrink-0" />
-                      : <ChevronRight size={11} className="text-slate-600 shrink-0" />
-                    }
-                    <span className="text-[10px] font-mono-num text-slate-500 shrink-0">{sub.codigo}</span>
-                    <span className="text-[10px] font-medium text-slate-400 truncate">{sub.nombre}</span>
-                  </button>
-                  {/* Add custom item button */}
-                  <button
-                    onClick={() => {
-                      setCreatingIn({ catCode: cat.codigo, catName: cat.nombre, subCode: sub.codigo, subName: sub.nombre });
-                      if (!expandedSubs.has(sub.codigo)) toggleSub(sub.codigo);
-                    }}
-                    className="p-1 mr-1 rounded text-slate-600 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
-                    title={`Agregar item a ${sub.nombre}`}
-                  >
-                    <Plus size={11} />
-                  </button>
-                </div>
+                {/* Level 1: A04#, A06#, etc. */}
+                <button
+                  onClick={() => toggleSub(sub.codigo)}
+                  className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left rounded-md hover:bg-white/5 transition-colors group"
+                >
+                  {expandedSubs.has(sub.codigo)
+                    ? <ChevronDown size={11} className="text-slate-600 shrink-0" />
+                    : <ChevronRight size={11} className="text-slate-600 shrink-0" />
+                  }
+                  <span className="text-[10px] font-mono-num text-cyan-500/60 shrink-0">{sub.codigo}</span>
+                  <span className="text-[10px] font-semibold text-slate-400 truncate">{sub.nombre}</span>
+                </button>
 
-                {expandedSubs.has(sub.codigo) && (
-                  <div className="ml-3 border-l border-slate-800 pl-2 mb-1">
-                    {sub.items.map(item => (
-                      <div
-                        key={item.codigo}
-                        draggable
-                        onDragStart={e => handleDragStart(e, item, cat.codigo, cat.nombre, sub.codigo, sub.nombre)}
-                        className={`flex items-start gap-1.5 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing group/item transition-colors ${
-                          item.isCustom ? 'hover:bg-emerald-500/8' : 'hover:bg-cyan-500/8'
-                        }`}
-                        onClick={() => setAddingItem(item)}
+                {expandedSubs.has(sub.codigo) && sub.children.map(subsub => (
+                  <div key={subsub.codigo} className="ml-3">
+                    {/* Level 2: A0400#, A0401#, etc. */}
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => toggleSubSub(subsub.codigo)}
+                        className="flex-1 flex items-center gap-1.5 px-2 py-1.5 text-left rounded-md hover:bg-white/5 transition-colors group"
                       >
-                        <GripVertical size={10} className="text-slate-700 mt-1 shrink-0 opacity-0 group-hover/item:opacity-100" />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`text-[9px] font-mono-num ${item.isCustom ? 'text-emerald-500/70' : 'text-cyan-500/60'}`}>
-                              {item.codigo}
-                            </span>
-                            {item.isCustom && (
-                              <span className="text-[7px] px-1 py-px rounded bg-emerald-500/15 text-emerald-400 font-bold uppercase">Propio</span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-300 leading-tight truncate">{item.descripcion}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[9px] text-slate-600 uppercase font-medium">{item.unidad}</span>
-                            <span className="text-[9px] text-amber-500 font-mono-num font-semibold">
-                              ${formatMoney(item.precio)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
-                          <button
-                            className="opacity-0 group-hover/item:opacity-100 p-1 rounded-md bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 transition-all"
-                            onClick={e => { e.stopPropagation(); setAddingItem(item); }}
-                          >
-                            <Plus size={10} />
-                          </button>
-                          {item.isCustom && (
-                            <button
-                              className="opacity-0 group-hover/item:opacity-100 p-1 rounded-md bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all"
-                              onClick={e => { e.stopPropagation(); handleDeleteCustom(sub.codigo, item.codigo); }}
-                              title="Eliminar item propio"
-                            >
-                              <Trash2 size={10} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                        {expandedSubSubs.has(subsub.codigo)
+                          ? <ChevronDown size={10} className="text-slate-700 shrink-0" />
+                          : <ChevronRight size={10} className="text-slate-700 shrink-0" />
+                        }
+                        <span className="text-[9px] font-mono-num text-slate-500 shrink-0">{subsub.codigo}</span>
+                        <span className="text-[9px] font-medium text-slate-500 truncate">{subsub.nombre}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCreatingIn({ catCode: cat.codigo, catName: cat.nombre, subCode: subsub.codigo, subName: subsub.nombre });
+                          if (!expandedSubSubs.has(subsub.codigo)) toggleSubSub(subsub.codigo);
+                        }}
+                        className="p-1 mr-1 rounded text-slate-700 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                        title={`Agregar item a ${subsub.nombre}`}
+                      >
+                        <Plus size={10} />
+                      </button>
+                    </div>
 
+                    {expandedSubSubs.has(subsub.codigo) && (
+                      <div className="ml-3 border-l border-slate-800 pl-2 mb-1">
+                        {/* Level 3: Items */}
+                        {subsub.items.map(item => (
+                          <div
+                            key={item.codigo}
+                            draggable
+                            onDragStart={e => handleDragStart(e, item, cat.codigo, cat.nombre, subsub.codigo, subsub.nombre)}
+                            className={`flex items-start gap-1.5 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing group/item transition-colors ${
+                              item.isCustom ? 'hover:bg-emerald-500/8' : 'hover:bg-cyan-500/8'
+                            }`}
+                            onClick={() => setAddingItem(item)}
+                          >
+                            <GripVertical size={10} className="text-slate-700 mt-1 shrink-0 opacity-0 group-hover/item:opacity-100" />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[9px] font-mono-num ${item.isCustom ? 'text-emerald-500/70' : 'text-cyan-500/60'}`}>
+                                  {item.codigo}
+                                </span>
+                                {item.isCustom && (
+                                  <span className="text-[7px] px-1 py-px rounded bg-emerald-500/15 text-emerald-400 font-bold uppercase">Propio</span>
+                                )}
+                              </div>
+                              <p className="text-[10px] text-slate-300 leading-tight truncate">{item.descripcion}</p>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className="text-[9px] text-slate-600 uppercase font-medium">{item.unidad}</span>
+                                <span className="text-[9px] text-amber-500 font-mono-num font-semibold">
+                                  ${formatMoney(item.precio)}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
+                              <button
+                                className="opacity-0 group-hover/item:opacity-100 p-1 rounded-md bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 transition-all"
+                                onClick={e => { e.stopPropagation(); setAddingItem(item); }}
+                              >
+                                <Plus size={10} />
+                              </button>
+                              {item.isCustom && (
+                                <button
+                                  className="opacity-0 group-hover/item:opacity-100 p-1 rounded-md bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all"
+                                  onClick={e => { e.stopPropagation(); handleDeleteCustom(subsub.codigo, item.codigo); }}
+                                  title="Eliminar item propio"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
+                ))}
               </div>
             ))}
           </div>

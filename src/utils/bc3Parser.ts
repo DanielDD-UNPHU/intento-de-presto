@@ -1,4 +1,4 @@
-import type { BC3Data, BC3Categoria, BC3SubCategoria, BC3Item } from '../types';
+import type { BC3Data, BC3Categoria, BC3SubCategoria, BC3SubSubCategoria, BC3Item } from '../types';
 
 interface RawConcept {
   code: string;
@@ -86,53 +86,60 @@ export function parseBC3File(content: string): BC3Data {
       children: [],
     };
 
-    // Level 1 children (e.g. A01#, A04#)
+    // Level 1 children (e.g. A01#, A04#) → BC3SubCategoria
     const level1Codes = childrenMap.get(topCode) ?? [];
 
     for (const l1Code of level1Codes) {
       const l1Concept = concepts.get(l1Code);
       if (!l1Concept) continue;
 
-      // Level 2 children (e.g. A0400#, A0401#)
+      const subCategoria: BC3SubCategoria = {
+        codigo: l1Concept.code,
+        nombre: cleanDescription(l1Concept.description),
+        children: [],
+      };
+
+      // Level 2 children (e.g. A0400#, A0401#) → BC3SubSubCategoria
       const level2Codes = childrenMap.get(l1Code) ?? [];
 
       if (level2Codes.length === 0) {
-        // Level 1 has no sub-subcategories — treat its items directly
+        // Level 1 has no level 2 children — collect items directly
         const items = collectItems(l1Code);
         if (items.length > 0) {
-          categoria.children.push({
+          subCategoria.children.push({
             codigo: l1Concept.code,
             nombre: cleanDescription(l1Concept.description),
             items,
           });
         }
-        continue;
+      } else {
+        for (const l2Code of level2Codes) {
+          const l2Concept = concepts.get(l2Code);
+          if (!l2Concept) continue;
+
+          const items = collectItems(l2Code);
+
+          if (items.length === 0 && l2Concept.price > 0) {
+            items.push({
+              codigo: l2Concept.code,
+              descripcion: cleanDescription(l2Concept.description),
+              unidad: l2Concept.unit,
+              precio: l2Concept.price,
+            });
+          }
+
+          if (items.length > 0) {
+            subCategoria.children.push({
+              codigo: l2Concept.code,
+              nombre: cleanDescription(l2Concept.description),
+              items,
+            });
+          }
+        }
       }
 
-      // Level 1 has level 2 children — each becomes a SubCategoria
-      for (const l2Code of level2Codes) {
-        const l2Concept = concepts.get(l2Code);
-        if (!l2Concept) continue;
-
-        const items = collectItems(l2Code);
-
-        // If no children items but has a price, it's a leaf
-        if (items.length === 0 && l2Concept.price > 0) {
-          items.push({
-            codigo: l2Concept.code,
-            descripcion: cleanDescription(l2Concept.description),
-            unidad: l2Concept.unit,
-            precio: l2Concept.price,
-          });
-        }
-
-        if (items.length > 0) {
-          categoria.children.push({
-            codigo: l2Concept.code,
-            nombre: cleanDescription(l2Concept.description),
-            items,
-          });
-        }
+      if (subCategoria.children.length > 0) {
+        categoria.children.push(subCategoria);
       }
     }
 
