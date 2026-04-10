@@ -270,7 +270,6 @@ export function usePresupuesto() {
 
 
   const addFromBC3WithTarget = useCallback((payload: BC3DragPayload, targetId: string | null, cantidad: number) => {
-    // Build everything outside of setState, then apply atomically
     const snap = conceptosRef.current;
     const currentRoots = rootIdsRef.current;
 
@@ -282,54 +281,61 @@ export function usePresupuesto() {
       parentId = targetId;
     }
 
-    // Find or create category folder
-    const siblings = parentId ? (next[parentId]?.childrenIds ?? []) : nextRootIds;
-    const existing = siblings.find(sid => next[sid]?.codigo === payload.subCategoryCode);
-    let folderId: string;
+    // Helper: find or create a folder under a parent
+    function ensureFolder(
+      under: string | null,
+      code: string,
+      name: string
+    ): string {
+      const siblings = under ? (next[under]?.childrenIds ?? []) : nextRootIds;
+      const existing = siblings.find(sid => next[sid]?.codigo === code);
+      if (existing) return existing;
 
-    if (existing) {
-      folderId = existing;
-    } else {
-      folderId = uuidv4();
-      const parent = parentId ? next[parentId] : null;
+      const id = uuidv4();
+      const parent = under ? next[under] : null;
       const nivel = parent ? parent.nivel + 1 : 0;
-      next[folderId] = {
-        id: folderId, codigo: payload.subCategoryCode, descripcion: payload.subCategoryName,
-        tipo: 'Capitulo', unidad: '', cantidad: 0,
+      next[id] = {
+        id, codigo: code, descripcion: name,
+        tipo: 'Capitulo' as const, unidad: '', cantidad: 0,
         precioRef: 0, precioInterno: 0, precioCliente: 0,
-        parentId, childrenIds: [], nivel, orden: siblings.length,
+        parentId: under, childrenIds: [], nivel, orden: siblings.length,
       };
-      if (parentId && next[parentId]) {
-        next[parentId] = { ...next[parentId], childrenIds: [...next[parentId].childrenIds, folderId] };
+      if (under && next[under]) {
+        next[under] = { ...next[under], childrenIds: [...next[under].childrenIds, id] };
       } else {
-        nextRootIds.push(folderId);
+        nextRootIds.push(id);
       }
+      return id;
     }
 
-    // Create the item
+    // Create folder chain: subCategory (A04# HORMIGON) > subSubCategory (A0402# COLUMNAS)
+    const subFolderId = ensureFolder(parentId, payload.subCategoryCode, payload.subCategoryName);
+    const subSubFolderId = ensureFolder(subFolderId, payload.subSubCategoryCode, payload.subSubCategoryName);
+
+    // Create the item inside the sub-sub folder
     const newId = uuidv4();
-    const folderConcepto = next[folderId];
+    const folderConcepto = next[subSubFolderId];
     const itemNivel = folderConcepto ? folderConcepto.nivel + 1 : 0;
 
     next[newId] = {
       id: newId, codigo: payload.item.codigo, descripcion: payload.item.descripcion,
       tipo: 'Partida', unidad: payload.item.unidad, cantidad,
       precioRef: payload.item.precio, precioInterno: payload.item.precio, precioCliente: payload.item.precio,
-      parentId: folderId, childrenIds: [], nivel: itemNivel,
+      parentId: subSubFolderId, childrenIds: [], nivel: itemNivel,
       orden: folderConcepto?.childrenIds.length ?? 0, codigoBC3: payload.item.codigo,
     };
-    next[folderId] = { ...next[folderId], childrenIds: [...next[folderId].childrenIds, newId] };
+    next[subSubFolderId] = { ...next[subSubFolderId], childrenIds: [...next[subSubFolderId].childrenIds, newId] };
 
-    // Apply both atomically
     setConceptos(next);
     setRootIds(nextRootIds);
 
-    // Auto-expand path
+    // Auto-expand the entire path
     setExpandedIds(prev => {
       const expanded = new Set(prev);
       if (targetId) expanded.add(targetId);
-      expanded.add(folderId);
-      let cur = next[folderId];
+      expanded.add(subFolderId);
+      expanded.add(subSubFolderId);
+      let cur = next[subFolderId];
       while (cur?.parentId) {
         expanded.add(cur.parentId);
         cur = next[cur.parentId];

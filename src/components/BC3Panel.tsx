@@ -200,11 +200,15 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
 
   const handleDragStart = (
     e: React.DragEvent, item: BC3Item,
-    catCode: string, catName: string, subCode: string, subName: string
+    catCode: string, catName: string,
+    subCode: string, subName: string,
+    subSubCode: string, subSubName: string
   ) => {
     const payload: BC3DragPayload = {
-      item, categoryCode: catCode, categoryName: catName,
+      item,
+      categoryCode: catCode, categoryName: catName,
       subCategoryCode: subCode, subCategoryName: subName,
+      subSubCategoryCode: subSubCode, subSubCategoryName: subSubName,
     };
     e.dataTransfer.setData('application/x-bc3-item', JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'copy';
@@ -373,7 +377,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
                           <div
                             key={item.codigo}
                             draggable
-                            onDragStart={e => handleDragStart(e, item, cat.codigo, cat.nombre, subsub.codigo, subsub.nombre)}
+                            onDragStart={e => handleDragStart(e, item, cat.codigo, cat.nombre, sub.codigo, sub.nombre, subsub.codigo, subsub.nombre)}
                             className={`flex items-start gap-1.5 px-2 py-1.5 rounded-md cursor-grab active:cursor-grabbing group/item transition-colors ${
                               item.isCustom ? 'hover:bg-emerald-500/8' : 'hover:bg-cyan-500/8'
                             }`}

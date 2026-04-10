@@ -71,10 +71,12 @@ export interface BC3Data {
 
 export interface BC3DragPayload {
   item: BC3Item;
-  categoryCode: string;
+  categoryCode: string;     // A#
   categoryName: string;
-  subCategoryCode: string;
+  subCategoryCode: string;  // A04#
   subCategoryName: string;
+  subSubCategoryCode: string; // A0402#
+  subSubCategoryName: string;
 }
 
 export interface ComponentSource {
