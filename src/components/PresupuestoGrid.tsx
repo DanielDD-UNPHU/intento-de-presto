@@ -415,6 +415,36 @@ export function PresupuestoGrid({
           const isComponentInstance = !!c.componentSourceId;
           const isComponentSource = !!c.isComponentSource;
 
+          // Check if this row is inside the drop target folder (for bounding box)
+          let isInsideDropTarget = false;
+          let isFirstInDropGroup = false;
+          let isLastInDropGroup = false;
+          if (dropTargetId && dropPosition === 'inside') {
+            // Walk up parents to see if this row is a descendant of dropTargetId
+            let walk: ConceptoPresupuesto | undefined = c;
+            while (walk) {
+              if (walk.id === dropTargetId) { isInsideDropTarget = true; break; }
+              walk = walk.parentId ? conceptos[walk.parentId] : undefined;
+            }
+            if (isInsideDropTarget || isDropTarget) {
+              // Check if first/last in the visible group
+              if (idx === 0 || !isInsideGroupAt(idx - 1)) isFirstInDropGroup = true;
+              if (idx === visibleIds.length - 1 || !isInsideGroupAt(idx + 1)) isLastInDropGroup = true;
+            }
+          }
+
+          function isInsideGroupAt(i: number): boolean {
+            const otherId = visibleIds[i];
+            if (!otherId) return false;
+            if (otherId === dropTargetId) return true;
+            let w = conceptos[otherId];
+            while (w) {
+              if (w.id === dropTargetId) return true;
+              w = w.parentId ? conceptos[w.parentId] : undefined;
+            }
+            return false;
+          }
+
           // For BC3 drops, only Capitulos can receive. For row moves, all rows are valid targets.
           const canDrop = isChapter; // BC3: only folders. Row drag shows blue line on all.
 
@@ -434,15 +464,24 @@ export function PresupuestoGrid({
             <div
               key={id}
               className={`grid border-b transition-all duration-75 relative ${
-                isDropTarget
-                  ? 'bg-blue-100/80 border-blue-200'
+                (isDropTarget || isInsideDropTarget)
+                  ? 'bg-blue-50/60'
                   : isSelected
                     ? 'bg-blue-50/80 border-blue-100'
                     : isChapter
                       ? `${nivelBg} ${nivelBorder} border-slate-100 ${nivelHover}`
                       : `${nivelBg} ${nivelBorder} border-slate-100/60 ${nivelHover}`
               }`}
-              style={{ gridTemplateColumns: COL_TEMPLATE, height: 34 }}
+              style={{
+                gridTemplateColumns: COL_TEMPLATE, height: 34,
+                ...(isDropTarget || isInsideDropTarget ? {
+                  borderLeft: '3px solid #3b82f6',
+                  borderRight: '3px solid #3b82f6',
+                  borderTop: isFirstInDropGroup ? '3px solid #3b82f6' : undefined,
+                  borderBottom: isLastInDropGroup ? '3px solid #3b82f6' : undefined,
+                  borderRadius: isFirstInDropGroup && isLastInDropGroup ? '8px' : isFirstInDropGroup ? '8px 8px 0 0' : isLastInDropGroup ? '0 0 8px 8px' : undefined,
+                } : {}),
+              }}
               draggable={!isChapter}
               onDragStart={!isChapter ? e => {
                 e.dataTransfer.setData('application/x-row-id', id);
