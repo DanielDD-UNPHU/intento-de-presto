@@ -4,6 +4,7 @@ import { TipoBadge } from './TipoBadge';
 import { formatMoney } from '../utils/formatters';
 import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2 } from 'lucide-react';
 import { highlightMatch } from '../utils/searchUtils';
+import { getCapituloRole, ROLE_CONFIG } from '../utils/capituloRoles';
 
 interface Props {
   visibleIds: string[];
@@ -510,17 +511,12 @@ export function PresupuestoGrid({
           // For BC3 drops, only Capitulos can receive. For row moves, all rows are valid targets.
           const canDrop = isChapter; // BC3: only folders. Row drag shows blue line on all.
 
-          // Nivel-based backgrounds + left border color
-          const nivelStyles = [
-            { bg: 'bg-white',          border: '',                                hover: 'hover:bg-slate-50' },
-            { bg: 'bg-blue-50/60',     border: 'border-l-4 border-l-blue-500',    hover: 'hover:bg-blue-100/50' },
-            { bg: 'bg-emerald-50/50',  border: 'border-l-4 border-l-emerald-500', hover: 'hover:bg-emerald-100/50' },
-            { bg: 'bg-amber-50/50',    border: 'border-l-4 border-l-amber-500',   hover: 'hover:bg-amber-100/50' },
-          ];
-          const ns = nivelStyles[Math.min(c.nivel, nivelStyles.length - 1)];
-          const nivelBg = ns.bg;
-          const nivelBorder = ns.border;
-          const nivelHover = ns.hover;
+          // Role-based backgrounds + left border color (Nivel / Bloque / Folder / BC3 categoria)
+          const capituloRole = isChapter ? getCapituloRole(c, conceptos) : null;
+          const roleStyle = capituloRole ? ROLE_CONFIG[capituloRole] : null;
+          const nivelBg = roleStyle?.rowBg ?? 'bg-white';
+          const nivelBorder = roleStyle?.rowBorder ?? '';
+          const nivelHover = roleStyle?.rowHover ?? 'hover:bg-slate-50';
 
           return (
             <div
@@ -574,18 +570,14 @@ export function PresupuestoGrid({
               {isComponentSource && <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-violet-500 rounded-l-sm" />}
               {isComponentInstance && <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-cyan-400 rounded-l-sm" />}
 
-              {/* Row number — soft color matches nivel */}
+              {/* Row number — color matches semantic role */}
               <div
                 className={`flex items-center justify-center text-[10px] cursor-pointer border-r transition-colors duration-75 ${
-                  isSelected
-                    ? c.nivel === 0
+                  isSelected && roleStyle
+                    ? `${roleStyle.rowNumberBg} ${roleStyle.rowNumberText} font-bold border-transparent`
+                    : isSelected
                       ? 'bg-slate-200 text-slate-700 font-bold border-slate-200'
-                      : c.nivel === 1
-                        ? 'bg-blue-100 text-blue-700 font-bold border-blue-100'
-                        : c.nivel === 2
-                          ? 'bg-emerald-100 text-emerald-700 font-bold border-emerald-100'
-                          : 'bg-amber-100 text-amber-700 font-bold border-amber-100'
-                    : 'text-slate-400 border-slate-100/60 hover:bg-slate-100 hover:text-slate-600'
+                      : 'text-slate-400 border-slate-100/60 hover:bg-slate-100 hover:text-slate-600'
                 }`}
                 onMouseDown={e => handleRowMouseDown(idx, e)}
                 onMouseEnter={() => handleRowMouseEnter(idx)}
@@ -595,7 +587,7 @@ export function PresupuestoGrid({
 
               {/* Tipo badge */}
               <div className="flex items-center justify-center border-r border-slate-100/60 relative">
-                <TipoBadge tipo={c.tipo} />
+                <TipoBadge tipo={c.tipo} capituloRole={capituloRole} />
                 {isComponentSource && (
                   <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 border border-white" title="Componente fuente" />
                 )}
