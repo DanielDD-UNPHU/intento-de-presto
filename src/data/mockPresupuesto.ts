@@ -39,7 +39,7 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
     c('S1-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'S1-BA', ['S1-A-A04-01','S1-A-A04-02','S1-A-A04-03']),
     c('S1-A-A04-01', 'A040000', 'Zapatas muros 4" 0.30m x 0.20m hormigon industrial 180kg/cm2', 'Partida', 'S1-A-A04', [], 'M3', 180, 16129.03, 16935, 0),
     c('S1-A-A04-02', 'A040100', 'Zapatas columna 1.20m x 1.20m x 0.40m hormigon industrial 210kg/cm2', 'Partida', 'S1-A-A04', [], 'M3', 280, 13559.47, 14237, 0),
-    c('S1-A-A04-03', 'A040400', 'Viga de amarre 15x20 4 3/8" hormigon 1:2:4 con ligadora', 'Partida', 'S1-A-A04', [], 'M3', 95, 47682.88, 50067, 0),
+    c('S1-A-A04-03', 'A040401', 'Viga de amarre 15x20 4 3/8 - 3/8@0.20m 1:2:4 con ligadora', 'Partida', 'S1-A-A04', [], 'M3', 95, 47682.88, 50067, 0),
 
     // S1 > BLQ B > A03
     c('S1-B-A03', 'A03', 'MOVIMIENTOS DE TIERRA Y DEMOLICIONES', 'Capitulo', 'S1-BB', ['S1-B-A03-01']),
@@ -54,8 +54,8 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
 
     // PB > BLQ A > A04 Hormigon (Columnas, Vigas, Losa)
     c('PB-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'PB-BA', ['PB-A-A04-01','PB-A-A04-02','PB-A-A04-03']),
-    c('PB-A-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 65, 20845.07, 21887, 0),
-    c('PB-A-A04-02', 'A040400', 'Viga de amarre 15x20 4 3/8" hormigon 1:2:4 con ligadora', 'Partida', 'PB-A-A04', [], 'M3', 85, 47682.88, 50067, 0),
+    c('PB-A-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 65, 54261.05, 56974, 0),
+    c('PB-A-A04-02', 'A040401', 'Viga de amarre 15x20 4 3/8 - 3/8@0.20m 1:2:4 con ligadora', 'Partida', 'PB-A-A04', [], 'M3', 85, 47682.88, 50067, 0),
     c('PB-A-A04-03', 'A040803', 'Losa ha e=0.10m 3/8"@0.25m hormigon industrial 210kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 120, 27469.04, 28842, 0),
 
     // PB > BLQ A > A06 Mamposteria
@@ -75,13 +75,13 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
 
     // PB > BLQ B > A04
     c('PB-B-A04', 'A04', 'HORMIGON', 'Capitulo', 'PB-BB', ['PB-B-A04-01','PB-B-A04-02']),
-    c('PB-B-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'PB-B-A04', [], 'M3', 42, 20845.07, 21887, 0),
-    c('PB-B-A04-02', 'A040400', 'Viga de amarre 15x20 4 3/8" hormigon 1:2:4 con ligadora', 'Partida', 'PB-B-A04', [], 'M3', 56, 47682.88, 50067, 0),
+    c('PB-B-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'PB-B-A04', [], 'M3', 42, 54261.05, 56974, 0),
+    c('PB-B-A04-02', 'A040401', 'Viga de amarre 15x20 4 3/8 - 3/8@0.20m 1:2:4 con ligadora', 'Partida', 'PB-B-A04', [], 'M3', 56, 47682.88, 50067, 0),
 
     // PB > Areas Comunes > A21 Parqueos
     c('PB-C-A21', 'A21', 'PARQUEOS Y VIAS', 'Capitulo', 'PB-BC', ['PB-C-A21-01','PB-C-A21-02']),
-    c('PB-C-A21-01', 'A210100', 'Contenes hormigon prefabricado tipo A', 'Partida', 'PB-C-A21', [], 'ML', 240, 1850, 1943, 0),
-    c('PB-C-A21-02', 'A210200', 'Badenes hormigon simple', 'Partida', 'PB-C-A21', [], 'ML', 120, 2200, 2310, 0),
+    c('PB-C-A21-01', 'A210131', 'Conten pulido h=0.40m hormigon 1:2:4 con ligadora', 'Partida', 'PB-C-A21', [], 'ML', 240, 2335.70, 2452, 0),
+    c('PB-C-A21-02', 'A210110', 'Acera hormigon violinada e=0.10m con ligadora', 'Partida', 'PB-C-A21', [], 'M2', 120, 2950, 3098, 0),
 
     // ══════════════════════════════════════
     // NIVEL 1 (el más completo)
@@ -91,8 +91,8 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
 
     // N1 > BLQ A > A04 Hormigon
     c('N1-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N1-BA', ['N1-A-A04-01','N1-A-A04-02','N1-A-A04-03']),
-    c('N1-A-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 52, 20845.07, 21887, 0),
-    c('N1-A-A04-02', 'A040400', 'Viga de amarre 15x20 4 3/8" hormigon 1:2:4 con ligadora', 'Partida', 'N1-A-A04', [], 'M3', 78, 47682.88, 50067, 0),
+    c('N1-A-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 52, 54261.05, 56974, 0),
+    c('N1-A-A04-02', 'A040401', 'Viga de amarre 15x20 4 3/8 - 3/8@0.20m 1:2:4 con ligadora', 'Partida', 'N1-A-A04', [], 'M3', 78, 47682.88, 50067, 0),
     c('N1-A-A04-03', 'A040803', 'Losa ha e=0.10m 3/8"@0.25m hormigon industrial 210kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 110, 27469.04, 28842, 0),
 
     // N1 > BLQ A > A06 Mamposteria
@@ -104,7 +104,7 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
     // N1 > BLQ A > A07 Terminaciones de Superficie
     c('N1-A-A07', 'A07', 'TERMINACIONES DE SUPERFICIE', 'Capitulo', 'N1-BA', ['N1-A-A07-01','N1-A-A07-02']),
     c('N1-A-A07-01', 'A070110', 'Fraguache con llana', 'Partida', 'N1-A-A07', [], 'M2', 4200, 107.10, 112, 0),
-    c('N1-A-A07-02', 'A070300', 'Panete mezcla cemento 1:4 en paredes', 'Partida', 'N1-A-A07', [], 'M2', 3600, 520, 546, 0),
+    c('N1-A-A07-02', 'A070111', 'Panete maestreado - interior', 'Partida', 'N1-A-A07', [], 'M2', 3600, 539.44, 566, 0),
 
     // N1 > BLQ A > A09 Pisos
     c('N1-A-A09', 'A09', 'PISOS', 'Capitulo', 'N1-BA', ['N1-A-A09-01','N1-A-A09-02']),
@@ -130,15 +130,15 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
 
     // N1 > BLQ B > A04
     c('N1-B-A04', 'A04', 'HORMIGON', 'Capitulo', 'N1-BB', ['N1-B-A04-01']),
-    c('N1-B-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'N1-B-A04', [], 'M3', 38, 20845.07, 21887, 0),
+    c('N1-B-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'N1-B-A04', [], 'M3', 38, 54261.05, 56974, 0),
 
     // ══════════════════════════════════════
     // NIVEL 2
     // ══════════════════════════════════════
     c('N2-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-2', ['N2-A-A04','N2-A-A09']),
     c('N2-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N2-BA', ['N2-A-A04-01','N2-A-A04-02','N2-A-A04-03']),
-    c('N2-A-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 48, 20845.07, 21887, 0),
-    c('N2-A-A04-02', 'A040400', 'Viga de amarre 15x20 4 3/8" hormigon 1:2:4 con ligadora', 'Partida', 'N2-A-A04', [], 'M3', 72, 47682.88, 50067, 0),
+    c('N2-A-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 48, 54261.05, 56974, 0),
+    c('N2-A-A04-02', 'A040401', 'Viga de amarre 15x20 4 3/8 - 3/8@0.20m 1:2:4 con ligadora', 'Partida', 'N2-A-A04', [], 'M3', 72, 47682.88, 50067, 0),
     c('N2-A-A04-03', 'A040803', 'Losa ha e=0.10m 3/8"@0.25m hormigon industrial 210kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 105, 27469.04, 28842, 0),
     c('N2-A-A09', 'A09', 'PISOS', 'Capitulo', 'N2-BA', ['N2-A-A09-01']),
     c('N2-A-A09-01', 'A090120', 'Ceramica europea buena calidad', 'Material', 'N2-A-A09', [], 'M2', 5200, 2823.74, 2965, 0),
@@ -148,15 +148,15 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
     // ══════════════════════════════════════
     c('N3-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-3', ['N3-A-A04']),
     c('N3-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N3-BA', ['N3-A-A04-01']),
-    c('N3-A-A04-01', 'A040200', 'Columnas cuadradas 0.30x0.30m hormigon industrial 210kg/cm2', 'Partida', 'N3-A-A04', [], 'M3', 48, 20845.07, 21887, 0),
+    c('N3-A-A04-01', 'A040237', 'Columna 30x30 8 1/2 hormigon industrial 210kg/cm2', 'Partida', 'N3-A-A04', [], 'M3', 48, 54261.05, 56974, 0),
 
     // ══════════════════════════════════════
     // AZOTEA
     // ══════════════════════════════════════
     c('AZ-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-AZ', ['AZ-A-A11','AZ-A-A19']),
     c('AZ-A-A11', 'A11', 'TERMINACION DE TECHOS', 'Capitulo', 'AZ-BA', ['AZ-A-A11-01','AZ-A-A11-02']),
-    c('AZ-A-A11-01', 'A110100', 'Fino de techo mezcla cemento', 'Partida', 'AZ-A-A11', [], 'M2', 850, 320, 336, 0),
-    c('AZ-A-A11-02', 'A110300', 'Impermeabilizante asfaltico techo', 'Partida', 'AZ-A-A11', [], 'M2', 850, 480, 504, 0),
+    c('AZ-A-A11-01', 'A110100', 'Fino techo plano', 'Partida', 'AZ-A-A11', [], 'M2', 850, 869.44, 913, 0),
+    c('AZ-A-A11-02', 'A110300', 'Impermeabilizante de techo tela asfaltica 3mm - todo costo', 'Partida', 'AZ-A-A11', [], 'M2', 850, 1100.90, 1156, 0),
     c('AZ-A-A19', 'A19', 'PINTURAS', 'Capitulo', 'AZ-BA', ['AZ-A-A19-01']),
     c('AZ-A-A19-01', 'A190100', 'Pintura economica int/ext', 'Partida', 'AZ-A-A19', [], 'M2', 1800, 202.55, 213, 0),
   ];
