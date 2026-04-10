@@ -20,6 +20,8 @@ interface Props {
   onSetDropTarget: (id: string | null) => void;
   dropPosition: 'before' | 'after' | 'inside' | null;
   onSetDropPosition: (pos: 'before' | 'after' | 'inside' | null) => void;
+  bc3DragPayload: BC3DragPayload | null;
+  onSetBC3DragPayload: (p: BC3DragPayload | null) => void;
   getTotal: (id: string) => number;
   getTotalInterno: (id: string) => number;
 }
@@ -50,7 +52,8 @@ function buildAutoCode(id: string, conceptos: Record<string, ConceptoPresupuesto
 export function PresupuestoGrid({
   visibleIds, rootIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
   onRevertOverride, onDropBC3, onMoveRow, dropTargetId, onSetDropTarget,
-  dropPosition, onSetDropPosition, getTotal, getTotalInterno,
+  dropPosition, onSetDropPosition, bc3DragPayload, onSetBC3DragPayload,
+  getTotal, getTotalInterno,
 }: Props) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -210,7 +213,34 @@ export function PresupuestoGrid({
     if (isBC3) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
-      if (targetId !== dropTargetId) onSetDropTarget(targetId);
+
+      // Smart snap: if dragging over a Capitulo that already has the parent folder,
+      // highlight that folder instead
+      let snapTargetId = targetId;
+      if (targetId && bc3DragPayload) {
+        const target = conceptos[targetId];
+        if (target?.tipo === 'Capitulo') {
+          // Look for existing subCategory folder (A04#) inside this target
+          const existingSub = target.childrenIds.find(
+            cid => conceptos[cid]?.codigo === bc3DragPayload.subCategoryCode
+          );
+          if (existingSub) {
+            snapTargetId = existingSub;
+            // Even deeper: look for subSubCategory (A0402#) inside the sub
+            const subConcept = conceptos[existingSub];
+            if (subConcept) {
+              const existingSubSub = subConcept.childrenIds.find(
+                cid => conceptos[cid]?.codigo === bc3DragPayload.subSubCategoryCode
+              );
+              if (existingSubSub) {
+                snapTargetId = existingSubSub;
+              }
+            }
+          }
+        }
+      }
+
+      if (snapTargetId !== dropTargetId) onSetDropTarget(snapTargetId);
       onSetDropPosition('inside');
     } else if (isRow && targetId) {
       if (canRowDropOn(targetId)) {
@@ -237,7 +267,7 @@ export function PresupuestoGrid({
         onSetDropPosition(null);
       }
     }
-  }, [dropTargetId, onSetDropTarget, onSetDropPosition, canRowDropOn, conceptos]);
+  }, [dropTargetId, onSetDropTarget, onSetDropPosition, canRowDropOn, conceptos, bc3DragPayload]);
 
   const handleDragLeave = useCallback(() => {
     onSetDropTarget(null);
@@ -249,6 +279,7 @@ export function PresupuestoGrid({
     const pos = dropPosition;
     onSetDropTarget(null);
     onSetDropPosition(null);
+    onSetBC3DragPayload(null);
 
     // BC3 catalog drop
     const bc3Data = e.dataTransfer.getData('application/x-bc3-item');
@@ -418,7 +449,7 @@ export function PresupuestoGrid({
                 e.dataTransfer.effectAllowed = 'move';
                 setDraggingRowId(id);
               } : undefined}
-              onDragEnd={() => { setDraggingRowId(null); onSetDropTarget(null); }}
+              onDragEnd={() => { setDraggingRowId(null); onSetDropTarget(null); onSetBC3DragPayload(null); }}
               onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
               onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}

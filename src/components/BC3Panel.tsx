@@ -38,6 +38,7 @@ interface Props {
   isOpen: boolean;
   onToggle: () => void;
   selectedCapituloId: string | null;
+  onSetBC3DragPayload: (p: BC3DragPayload | null) => void;
 }
 
 // Generate next code in sequence for a subcategory
@@ -61,7 +62,7 @@ function generateNextCode(subCodigo: string, existingItems: BC3Item[]): string {
   return `${prefix}${padded}`;
 }
 
-export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Props) {
+export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId, onSetBC3DragPayload }: Props) {
   const [search, setSearch] = useState('');
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [expandedSubs, setExpandedSubs] = useState<Set<string>>(new Set());
@@ -212,6 +213,7 @@ export function BC3Panel({ onAddItem, isOpen, onToggle, selectedCapituloId }: Pr
     };
     e.dataTransfer.setData('application/x-bc3-item', JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'copy';
+    onSetBC3DragPayload(payload);
   };
 
   // Create custom item

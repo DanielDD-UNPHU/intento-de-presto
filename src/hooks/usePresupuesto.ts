@@ -24,6 +24,7 @@ export function usePresupuesto() {
   const [pendingPropagation, setPendingPropagation] = useState<PendingPropagation | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+  const [bc3DragPayload, setBC3DragPayload] = useState<BC3DragPayload | null>(null);
 
 
   // ── Tree expand/collapse ──
@@ -869,7 +870,7 @@ export function usePresupuesto() {
     selectedIds, setSelectedIds,
     expandedIds, toggleExpanded, expandId,
     componentSources, pendingPropagation, setPendingPropagation,
-    dropTargetId, setDropTargetId, dropPosition, setDropPosition,
+    dropTargetId, setDropTargetId, dropPosition, setDropPosition, bc3DragPayload, setBC3DragPayload,
     getVisibleIds,
     getTotal, getTotalInterno, getGrandTotal, getGrandTotalInterno,
     updateConcepto, setConceptoDirectly, revertOverride,

@@ -176,6 +176,7 @@ export function PresupuestoEditor() {
           onToggle={() => setBc3Open(!bc3Open)}
           onAddItem={store.addFromBC3}
           selectedCapituloId={store.getSelectedCapituloId()}
+          onSetBC3DragPayload={store.setBC3DragPayload}
         />
         <div className="flex-1 flex flex-col min-w-0 bg-white">
           <PresupuestoGrid
@@ -194,6 +195,8 @@ export function PresupuestoEditor() {
             onSetDropTarget={store.setDropTargetId}
             dropPosition={store.dropPosition}
             onSetDropPosition={store.setDropPosition}
+            bc3DragPayload={store.bc3DragPayload}
+            onSetBC3DragPayload={store.setBC3DragPayload}
             getTotal={store.getTotal}
             getTotalInterno={store.getTotalInterno}
           />
