@@ -214,8 +214,28 @@ export function PresupuestoGrid({
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
 
-      // Bounding box: always wraps the Capitulo the cursor is on
-      if (targetId !== dropTargetId) onSetDropTarget(targetId);
+      // Find the nearest Bloque ancestor — bounding box wraps the whole bloque
+      let bloqueId: string | null = null;
+      if (targetId) {
+        let walk = conceptos[targetId];
+        // Walk up until we find a BLQ-* concept or a direct child of a Nivel
+        while (walk) {
+          // A "bloque" is a Capitulo whose parent is a Nivel (root level)
+          if (walk.parentId && !conceptos[walk.parentId]?.parentId) {
+            bloqueId = walk.id;
+            break;
+          }
+          // If we're already at a root-child (bloque itself)
+          if (!walk.parentId) break;
+          walk = walk.parentId ? conceptos[walk.parentId] : undefined;
+        }
+        // If targetId itself is a nivel (root), don't highlight
+        if (!bloqueId && conceptos[targetId]?.parentId) {
+          bloqueId = targetId;
+        }
+      }
+
+      if (bloqueId !== dropTargetId) onSetDropTarget(bloqueId);
       onSetDropPosition('inside');
     } else if (isRow && targetId) {
       if (canRowDropOn(targetId)) {
@@ -252,16 +272,17 @@ export function PresupuestoGrid({
   const handleDrop = useCallback((e: React.DragEvent, targetId: string | null) => {
     e.preventDefault();
     const pos = dropPosition;
+    const bc3Target = dropTargetId; // For BC3: this is the bloque
     onSetDropTarget(null);
     onSetDropPosition(null);
     onSetBC3DragPayload(null);
 
-    // BC3 catalog drop
+    // BC3 catalog drop — always drops into the bloque (not the specific row)
     const bc3Data = e.dataTransfer.getData('application/x-bc3-item');
     if (bc3Data) {
       try {
         const payload: BC3DragPayload = JSON.parse(bc3Data);
-        onDropBC3(payload, targetId, 1);
+        onDropBC3(payload, bc3Target, 1);
       } catch { /* ignore */ }
       return;
     }
