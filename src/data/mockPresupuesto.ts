@@ -5,7 +5,6 @@ function c(
   parentId: string | null, childrenIds: string[],
   unidad = '', cantidad = 0, precioRef = 0, precioInterno = 0, _precioCliente = 0
 ): Omit<ConceptoPresupuesto, 'nivel' | 'orden'> {
-  // precioCliente = precioRef al inicio (son independientes pero arrancan iguales)
   return { id, codigo, descripcion, tipo, unidad, cantidad, precioRef, precioInterno, precioCliente: precioRef, parentId, childrenIds };
 }
 
@@ -14,155 +13,156 @@ export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {
 
   const items: Omit<ConceptoPresupuesto, 'nivel' | 'orden'>[] = [
     // ══════════════════════════════════════
-    // NIVELES (nivel 0) — padres principales
+    // NIVELES (raiz)
     // ══════════════════════════════════════
-    c('N-S1', 'S1', 'SOTANO 1', 'Capitulo', null, ['S1-BLQ-A','S1-BLQ-B']),
-    c('N-PB', 'PB', 'PLANTA BAJA', 'Capitulo', null, ['PB-BLQ-A','PB-BLQ-B','PB-BLQ-C']),
-    c('N-1', 'N1', 'NIVEL 1', 'Capitulo', null, ['N1-BLQ-A','N1-BLQ-B']),
-    c('N-2', 'N2', 'NIVEL 2', 'Capitulo', null, ['N2-BLQ-A']),
-    c('N-3', 'N3', 'NIVEL 3', 'Capitulo', null, ['N3-BLQ-A']),
-    c('N-AZ', 'AZ', 'AZOTEA', 'Capitulo', null, ['AZ-BLQ-A']),
-
-    // ══════════════════════════════════════
-    // SOTANO 1 → Bloques
-    // ══════════════════════════════════════
-    c('S1-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-S1', ['S1-A-OG']),
-    c('S1-BLQ-B', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-S1', ['S1-B-OG']),
-
-    // Sótano 1 > Bloque A > Obra Gruesa
-    c('S1-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'S1-BLQ-A', ['S1-A-OG-MT','S1-A-OG-FUN']),
-    c('S1-A-OG-MT', 'A1', 'MOVIMIENTO DE TIERRAS', 'Capitulo', 'S1-A-OG', ['S1-A-OG-MT-01','S1-A-OG-MT-02']),
-    c('S1-A-OG-MT-01', 'A1.01', 'Excavacion sotano con retroexcavadora', 'Maquinaria', 'S1-A-OG-MT', [], 'M3', 4200, 420, 450, 510),
-    c('S1-A-OG-MT-02', 'A1.02', 'Bote de material excedente', 'Maquinaria', 'S1-A-OG-MT', [], 'M3', 3800, 380, 400, 450),
-    c('S1-A-OG-FUN', 'A3', 'FUNDACIONES', 'Capitulo', 'S1-A-OG', ['S1-A-OG-FUN-01','S1-A-OG-FUN-02','S1-A-OG-FUN-03']),
-    c('S1-A-OG-FUN-01', 'A3.01', 'Hormigon armado zapatas f\'c=280', 'Partida', 'S1-A-OG-FUN', [], 'M3', 520, 12500, 13200, 14850),
-    c('S1-A-OG-FUN-02', 'A3.02', 'Acero de refuerzo grado 60 zapatas', 'Material', 'S1-A-OG-FUN', [], 'KG', 22000, 72, 76, 85),
-    c('S1-A-OG-FUN-03', 'A3.03', 'Encofrado metalico fundaciones', 'Maquinaria', 'S1-A-OG-FUN', [], 'M2', 1400, 580, 620, 700),
-
-    // Sótano 1 > Bloque B > Obra Gruesa
-    c('S1-B-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'S1-BLQ-B', ['S1-B-OG-MT']),
-    c('S1-B-OG-MT', 'A1', 'MOVIMIENTO DE TIERRAS', 'Capitulo', 'S1-B-OG', ['S1-B-OG-MT-01']),
-    c('S1-B-OG-MT-01', 'A1.01', 'Excavacion sotano con retroexcavadora', 'Maquinaria', 'S1-B-OG-MT', [], 'M3', 2800, 420, 450, 510),
+    c('N-S1', 'S1', 'SOTANO 1', 'Capitulo', null, ['S1-BA','S1-BB']),
+    c('N-PB', 'PB', 'PLANTA BAJA', 'Capitulo', null, ['PB-BA','PB-BB','PB-BC']),
+    c('N-1', 'N1', 'NIVEL 1', 'Capitulo', null, ['N1-BA','N1-BB']),
+    c('N-2', 'N2', 'NIVEL 2', 'Capitulo', null, ['N2-BA']),
+    c('N-3', 'N3', 'NIVEL 3', 'Capitulo', null, ['N3-BA']),
+    c('N-AZ', 'AZ', 'AZOTEA', 'Capitulo', null, ['AZ-BA']),
 
     // ══════════════════════════════════════
-    // PLANTA BAJA → Bloques
+    // SOTANO 1
     // ══════════════════════════════════════
-    c('PB-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-PB', ['PB-A-OG','PB-A-TER','PB-A-SAN']),
-    c('PB-BLQ-B', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-PB', ['PB-B-OG']),
-    c('PB-BLQ-C', 'BLQ-C', 'AREAS COMUNES', 'Capitulo', 'N-PB', ['PB-C-EXT']),
+    c('S1-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-S1', ['S1-A-A03','S1-A-A04']),
+    c('S1-BB', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-S1', ['S1-B-A03']),
 
-    // PB > Bloque A > Obra Gruesa
-    c('PB-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'PB-BLQ-A', ['PB-A-OG-EST','PB-A-OG-MAM']),
-    c('PB-A-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'PB-A-OG', ['PB-A-OG-EST-01','PB-A-OG-EST-02','PB-A-OG-EST-03']),
-    c('PB-A-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'PB-A-OG-EST', [], 'M3', 65, 15800, 16700, 18800),
-    c('PB-A-OG-EST-02', 'A4.02', 'Hormigon armado vigas f\'c=280', 'Partida', 'PB-A-OG-EST', [], 'M3', 85, 14500, 15300, 17200),
-    c('PB-A-OG-EST-03', 'A4.03', 'Hormigon armado losa f\'c=280', 'Partida', 'PB-A-OG-EST', [], 'M3', 120, 13200, 13900, 15700),
-    c('PB-A-OG-MAM', 'A5', 'MAMPOSTERIA', 'Capitulo', 'PB-A-OG', ['PB-A-OG-MAM-01','PB-A-OG-MAM-02']),
-    c('PB-A-OG-MAM-01', 'A5.01', 'Block 6" muros exteriores', 'Material', 'PB-A-OG-MAM', [], 'M2', 380, 1650, 1750, 1970),
-    c('PB-A-OG-MAM-02', 'A5.02', 'Block 4" muros divisorios', 'Material', 'PB-A-OG-MAM', [], 'M2', 520, 1200, 1280, 1520),
+    // S1 > Bloque A > A03 Movimientos de Tierra
+    c('S1-A-A03', 'A03', 'MOVIMIENTOS DE TIERRA Y DEMOLICIONES', 'Capitulo', 'S1-BA', ['S1-A-A03-01','S1-A-A03-02','S1-A-A03-03']),
+    c('S1-A-A03-01', 'A030000', 'Desmonte de vegetacion terreno', 'Partida', 'S1-A-A03', [], 'M2', 2400, 12.17, 13, 0),
+    c('S1-A-A03-02', 'A030100', 'Demolicion elementos hormigon con compresor', 'Maquinaria', 'S1-A-A03', [], 'M3', 320, 4000, 4200, 0),
+    c('S1-A-A03-03', 'A030300', 'Bote de material con camion volteo', 'Maquinaria', 'S1-A-A03', [], 'M3', 3800, 1200, 1260, 0),
 
-    // PB > Bloque A > Terminaciones
-    c('PB-A-TER', 'B', 'TERMINACIONES', 'Capitulo', 'PB-BLQ-A', ['PB-A-TER-PI']),
-    c('PB-A-TER-PI', 'B1', 'PISOS', 'Capitulo', 'PB-A-TER', ['PB-A-TER-PI-01','PB-A-TER-PI-02']),
-    c('PB-A-TER-PI-01', 'B1.01', 'Porcelanato 60x60 lobby', 'Material', 'PB-A-TER-PI', [], 'M2', 280, 2100, 2220, 2500),
-    c('PB-A-TER-PI-02', 'B1.02', 'Mano de obra instalacion pisos', 'ManoObra', 'PB-A-TER-PI', [], 'M2', 280, 420, 450, 510),
+    // S1 > Bloque A > A04 Hormigon (Fundaciones)
+    c('S1-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'S1-BA', ['S1-A-A04-01','S1-A-A04-02','S1-A-A04-03']),
+    c('S1-A-A04-01', 'A040000', 'Zapatas muros hormigon industrial 180kg/cm2', 'Partida', 'S1-A-A04', [], 'M3', 520, 16129, 16935, 0),
+    c('S1-A-A04-02', 'A040100', 'Zapatas columnas hormigon industrial 210kg/cm2', 'Partida', 'S1-A-A04', [], 'M3', 280, 16459, 17280, 0),
+    c('S1-A-A04-03', 'A040200', 'Vigas de amarre fundacion 210kg/cm2', 'Partida', 'S1-A-A04', [], 'M3', 185, 14755, 15490, 0),
 
-    // PB > Bloque A > Sanitarias
-    c('PB-A-SAN', 'C', 'INSTALACIONES SANITARIAS', 'Capitulo', 'PB-BLQ-A', ['PB-A-SAN-AG']),
-    c('PB-A-SAN-AG', 'C1', 'AGUA POTABLE', 'Capitulo', 'PB-A-SAN', ['PB-A-SAN-AG-01','PB-A-SAN-AG-02']),
-    c('PB-A-SAN-AG-01', 'C1.01', 'Punto agua fria PVC 1/2"', 'Partida', 'PB-A-SAN-AG', [], 'UND', 24, 2500, 2650, 2980),
-    c('PB-A-SAN-AG-02', 'C1.02', 'Punto agua caliente CPVC 1/2"', 'Partida', 'PB-A-SAN-AG', [], 'UND', 16, 3200, 3380, 3800),
-
-    // PB > Bloque B > Obra Gruesa
-    c('PB-B-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'PB-BLQ-B', ['PB-B-OG-EST']),
-    c('PB-B-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'PB-B-OG', ['PB-B-OG-EST-01','PB-B-OG-EST-02']),
-    c('PB-B-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'PB-B-OG-EST', [], 'M3', 42, 15800, 16700, 18800),
-    c('PB-B-OG-EST-02', 'A4.02', 'Hormigon armado vigas f\'c=280', 'Partida', 'PB-B-OG-EST', [], 'M3', 56, 14500, 15300, 17200),
-
-    // PB > Areas Comunes > Obras Exteriores
-    c('PB-C-EXT', 'F', 'OBRAS EXTERIORES', 'Capitulo', 'PB-BLQ-C', ['PB-C-EXT-PAV']),
-    c('PB-C-EXT-PAV', 'F1', 'PAVIMENTOS', 'Capitulo', 'PB-C-EXT', ['PB-C-EXT-PAV-01','PB-C-EXT-PAV-02']),
-    c('PB-C-EXT-PAV-01', 'F1.01', 'Pavimento hormigon vehicular', 'Partida', 'PB-C-EXT-PAV', [], 'M2', 1200, 2800, 2960, 3330),
-    c('PB-C-EXT-PAV-02', 'F1.02', 'Aceras peatonales hormigon', 'Partida', 'PB-C-EXT-PAV', [], 'M2', 480, 1800, 1900, 2140),
+    // S1 > Bloque B > A03
+    c('S1-B-A03', 'A03', 'MOVIMIENTOS DE TIERRA Y DEMOLICIONES', 'Capitulo', 'S1-BB', ['S1-B-A03-01']),
+    c('S1-B-A03-01', 'A030000', 'Desmonte de vegetacion terreno', 'Partida', 'S1-B-A03', [], 'M2', 1600, 12.17, 13, 0),
 
     // ══════════════════════════════════════
-    // NIVEL 1 → Bloques (el más completo)
+    // PLANTA BAJA
     // ══════════════════════════════════════
-    c('N1-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-1', ['N1-A-OG','N1-A-TER','N1-A-SAN','N1-A-ELEC']),
-    c('N1-BLQ-B', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-1', ['N1-B-OG']),
+    c('PB-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-PB', ['PB-A-A04','PB-A-A06','PB-A-A09','PB-A-A15']),
+    c('PB-BB', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-PB', ['PB-B-A04']),
+    c('PB-BC', 'BLQ-C', 'AREAS COMUNES', 'Capitulo', 'N-PB', ['PB-C-A21']),
 
-    // N1 > Bloque A > Obra Gruesa
-    c('N1-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'N1-BLQ-A', ['N1-A-OG-EST','N1-A-OG-MAM']),
-    c('N1-A-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'N1-A-OG', ['N1-A-OG-EST-01','N1-A-OG-EST-02','N1-A-OG-EST-03','N1-A-OG-EST-04','N1-A-OG-EST-05']),
-    c('N1-A-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'N1-A-OG-EST', [], 'M3', 52, 15800, 16700, 18800),
-    c('N1-A-OG-EST-02', 'A4.02', 'Hormigon armado vigas f\'c=280', 'Partida', 'N1-A-OG-EST', [], 'M3', 78, 14500, 15300, 17200),
-    c('N1-A-OG-EST-03', 'A4.03', 'Hormigon armado losa f\'c=280', 'Partida', 'N1-A-OG-EST', [], 'M3', 110, 13200, 13900, 15700),
-    c('N1-A-OG-EST-04', 'A4.04', 'Acero de refuerzo grado 60', 'Material', 'N1-A-OG-EST', [], 'KG', 15200, 72, 76, 86),
-    c('N1-A-OG-EST-05', 'A4.05', 'Encofrado losas y vigas', 'ManoObra', 'N1-A-OG-EST', [], 'M2', 980, 650, 690, 780),
-    c('N1-A-OG-MAM', 'A5', 'MAMPOSTERIA', 'Capitulo', 'N1-A-OG', ['N1-A-OG-MAM-01','N1-A-OG-MAM-02','N1-A-OG-MAM-03']),
-    c('N1-A-OG-MAM-01', 'A5.01', 'Block 6" muros exteriores', 'Material', 'N1-A-OG-MAM', [], 'M2', 420, 1650, 1750, 1970),
-    c('N1-A-OG-MAM-02', 'A5.02', 'Block 4" muros divisorios', 'Material', 'N1-A-OG-MAM', [], 'M2', 680, 1200, 1280, 1520),
-    c('N1-A-OG-MAM-03', 'A5.03', 'Mano de obra colocacion blocks', 'ManoObra', 'N1-A-OG-MAM', [], 'M2', 1100, 380, 400, 450),
+    // PB > Bloque A > A04 Hormigon (Estructura)
+    c('PB-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'PB-BA', ['PB-A-A04-01','PB-A-A04-02','PB-A-A04-03']),
+    c('PB-A-A04-01', 'A040200', 'Columnas hormigon industrial 280kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 65, 15800, 16590, 0),
+    c('PB-A-A04-02', 'A040300', 'Vigas hormigon industrial 280kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 85, 14500, 15225, 0),
+    c('PB-A-A04-03', 'A040400', 'Losa maciza hormigon industrial 280kg/cm2', 'Partida', 'PB-A-A04', [], 'M3', 120, 13200, 13860, 0),
 
-    // N1 > Bloque A > Terminaciones
-    c('N1-A-TER', 'B', 'TERMINACIONES', 'Capitulo', 'N1-BLQ-A', ['N1-A-TER-PI','N1-A-TER-PIN']),
-    c('N1-A-TER-PI', 'B1', 'PISOS', 'Capitulo', 'N1-A-TER', ['N1-A-TER-PI-01','N1-A-TER-PI-02','N1-A-TER-PI-03']),
-    c('N1-A-TER-PI-01', 'B1.01', 'Ceramica 60x60 areas comunes', 'Material', 'N1-A-TER-PI', [], 'M2', 1800, 1450, 1520, 1710),
-    c('N1-A-TER-PI-02', 'B1.02', 'Porcelanato 60x60 apartamentos', 'Material', 'N1-A-TER-PI', [], 'M2', 5400, 2100, 2220, 2500),
-    c('N1-A-TER-PI-03', 'B1.03', 'Mano de obra instalacion pisos', 'ManoObra', 'N1-A-TER-PI', [], 'M2', 7200, 420, 450, 510),
-    c('N1-A-TER-PIN', 'B3', 'PINTURA', 'Capitulo', 'N1-A-TER', ['N1-A-TER-PIN-01','N1-A-TER-PIN-02']),
-    c('N1-A-TER-PIN-01', 'B3.01', 'Pintura interior latex 2 manos', 'Partida', 'N1-A-TER-PIN', [], 'M2', 4200, 180, 190, 215),
-    c('N1-A-TER-PIN-02', 'B3.02', 'Pintura exterior elastomerica', 'Partida', 'N1-A-TER-PIN', [], 'M2', 1800, 320, 340, 380),
+    // PB > Bloque A > A06 Mamposteria
+    c('PB-A-A06', 'A06', 'MAMPOSTERIA', 'Capitulo', 'PB-BA', ['PB-A-A06-01','PB-A-A06-02']),
+    c('PB-A-A06-01', 'A060201', 'Muro bloque 6" con fino ambas caras', 'Partida', 'PB-A-A06', [], 'M2', 380, 2800, 2940, 0),
+    c('PB-A-A06-02', 'A060301', 'Muro bloque 4" divisorio con fino', 'Partida', 'PB-A-A06', [], 'M2', 520, 1950, 2050, 0),
 
-    // N1 > Bloque A > Sanitarias
-    c('N1-A-SAN', 'C', 'INSTALACIONES SANITARIAS', 'Capitulo', 'N1-BLQ-A', ['N1-A-SAN-AG','N1-A-SAN-AN']),
-    c('N1-A-SAN-AG', 'C1', 'AGUA POTABLE', 'Capitulo', 'N1-A-SAN', ['N1-A-SAN-AG-01','N1-A-SAN-AG-02']),
-    c('N1-A-SAN-AG-01', 'C1.01', 'Punto agua fria PVC 1/2"', 'Partida', 'N1-A-SAN-AG', [], 'UND', 48, 2500, 2650, 2980),
-    c('N1-A-SAN-AG-02', 'C1.02', 'Punto agua caliente CPVC 1/2"', 'Partida', 'N1-A-SAN-AG', [], 'UND', 32, 3200, 3380, 3800),
-    c('N1-A-SAN-AN', 'C2', 'AGUAS NEGRAS', 'Capitulo', 'N1-A-SAN', ['N1-A-SAN-AN-01']),
-    c('N1-A-SAN-AN-01', 'C2.01', 'Punto desague PVC 4"', 'Partida', 'N1-A-SAN-AN', [], 'UND', 36, 2200, 2320, 2610),
+    // PB > Bloque A > A09 Pisos
+    c('PB-A-A09', 'A09', 'PISOS', 'Capitulo', 'PB-BA', ['PB-A-A09-01','PB-A-A09-02']),
+    c('PB-A-A09-01', 'A090120', 'Ceramica europea buena calidad', 'Material', 'PB-A-A09', [], 'M2', 280, 2823.74, 2965, 0),
+    c('PB-A-A09-02', 'A090100', 'Adoquin barahona gris', 'Material', 'PB-A-A09', [], 'M2', 150, 1951.72, 2050, 0),
 
-    // N1 > Bloque A > Electricas
-    c('N1-A-ELEC', 'D', 'INSTALACIONES ELECTRICAS', 'Capitulo', 'N1-BLQ-A', ['N1-A-ELEC-CAN']),
-    c('N1-A-ELEC-CAN', 'D1', 'CANALIZACIONES', 'Capitulo', 'N1-A-ELEC', ['N1-A-ELEC-CAN-01','N1-A-ELEC-CAN-02']),
-    c('N1-A-ELEC-CAN-01', 'D1.01', 'Punto de luz sencillo', 'Partida', 'N1-A-ELEC-CAN', [], 'UND', 96, 3500, 3700, 4160),
-    c('N1-A-ELEC-CAN-02', 'D1.02', 'Punto tomacorriente doble', 'Partida', 'N1-A-ELEC-CAN', [], 'UND', 72, 2800, 2960, 3330),
+    // PB > Bloque A > A15 Instalaciones Sanitarias
+    c('PB-A-A15', 'A15', 'INSTALACIONES SANITARIAS', 'Capitulo', 'PB-BA', ['PB-A-A15-01','PB-A-A15-02']),
+    c('PB-A-A15-01', 'A150100', 'Salida agua potable 1/2" polietileno', 'Partida', 'PB-A-A15', [], 'UND', 24, 2371.94, 2490, 0),
+    c('PB-A-A15-02', 'A150110', 'Salida sanitaria A.N. PVC 4" aerea', 'Partida', 'PB-A-A15', [], 'UND', 16, 3124.21, 3280, 0),
 
-    // N1 > Bloque B > Obra Gruesa
-    c('N1-B-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'N1-BLQ-B', ['N1-B-OG-EST']),
-    c('N1-B-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'N1-B-OG', ['N1-B-OG-EST-01']),
-    c('N1-B-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'N1-B-OG-EST', [], 'M3', 38, 15800, 16700, 18800),
+    // PB > Bloque B > A04 Hormigon
+    c('PB-B-A04', 'A04', 'HORMIGON', 'Capitulo', 'PB-BB', ['PB-B-A04-01','PB-B-A04-02']),
+    c('PB-B-A04-01', 'A040200', 'Columnas hormigon industrial 280kg/cm2', 'Partida', 'PB-B-A04', [], 'M3', 42, 15800, 16590, 0),
+    c('PB-B-A04-02', 'A040300', 'Vigas hormigon industrial 280kg/cm2', 'Partida', 'PB-B-A04', [], 'M3', 56, 14500, 15225, 0),
+
+    // PB > Areas Comunes > A21 Parqueos y Vias
+    c('PB-C-A21', 'A21', 'PARQUEOS Y VIAS', 'Capitulo', 'PB-BC', ['PB-C-A21-01','PB-C-A21-02']),
+    c('PB-C-A21-01', 'A210100', 'Pavimento hormigon vehicular', 'Partida', 'PB-C-A21', [], 'M2', 1200, 2800, 2940, 0),
+    c('PB-C-A21-02', 'A210200', 'Aceras peatonales hormigon', 'Partida', 'PB-C-A21', [], 'M2', 480, 1800, 1890, 0),
 
     // ══════════════════════════════════════
-    // NIVEL 2 → Bloques
+    // NIVEL 1 (el más completo)
     // ══════════════════════════════════════
-    c('N2-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-2', ['N2-A-OG','N2-A-TER']),
+    c('N1-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-1', ['N1-A-A04','N1-A-A06','N1-A-A07','N1-A-A09','N1-A-A15','N1-A-A17','N1-A-A19']),
+    c('N1-BB', 'BLQ-B', 'BLOQUE B', 'Capitulo', 'N-1', ['N1-B-A04']),
 
-    c('N2-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'N2-BLQ-A', ['N2-A-OG-EST']),
-    c('N2-A-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'N2-A-OG', ['N2-A-OG-EST-01','N2-A-OG-EST-02','N2-A-OG-EST-03']),
-    c('N2-A-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'N2-A-OG-EST', [], 'M3', 48, 15800, 16700, 18800),
-    c('N2-A-OG-EST-02', 'A4.02', 'Hormigon armado vigas f\'c=280', 'Partida', 'N2-A-OG-EST', [], 'M3', 72, 14500, 15300, 17200),
-    c('N2-A-OG-EST-03', 'A4.03', 'Hormigon armado losa f\'c=280', 'Partida', 'N2-A-OG-EST', [], 'M3', 105, 13200, 13900, 15700),
-    c('N2-A-TER', 'B', 'TERMINACIONES', 'Capitulo', 'N2-BLQ-A', ['N2-A-TER-PI']),
-    c('N2-A-TER-PI', 'B1', 'PISOS', 'Capitulo', 'N2-A-TER', ['N2-A-TER-PI-01']),
-    c('N2-A-TER-PI-01', 'B1.01', 'Porcelanato 60x60 apartamentos', 'Material', 'N2-A-TER-PI', [], 'M2', 5200, 2100, 2220, 2500),
+    // N1 > Bloque A > A04 Hormigon
+    c('N1-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N1-BA', ['N1-A-A04-01','N1-A-A04-02','N1-A-A04-03']),
+    c('N1-A-A04-01', 'A040200', 'Columnas hormigon industrial 350kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 52, 15800, 16590, 0),
+    c('N1-A-A04-02', 'A040300', 'Vigas hormigon industrial 280kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 78, 14500, 15225, 0),
+    c('N1-A-A04-03', 'A040400', 'Losa maciza hormigon industrial 280kg/cm2', 'Partida', 'N1-A-A04', [], 'M3', 110, 13200, 13860, 0),
+
+    // N1 > Bloque A > A06 Mamposteria
+    c('N1-A-A06', 'A06', 'MAMPOSTERIA', 'Capitulo', 'N1-BA', ['N1-A-A06-01','N1-A-A06-02','N1-A-A06-03']),
+    c('N1-A-A06-01', 'A060201', 'Muro bloque 6" con fino ambas caras', 'Partida', 'N1-A-A06', [], 'M2', 420, 2800, 2940, 0),
+    c('N1-A-A06-02', 'A060301', 'Muro bloque 4" divisorio con fino', 'Partida', 'N1-A-A06', [], 'M2', 680, 1950, 2050, 0),
+    c('N1-A-A06-03', 'A060101', 'Mortero 1:3 para bloques', 'Material', 'N1-A-A06', [], 'M3', 45, 8620, 9050, 0),
+
+    // N1 > Bloque A > A07 Terminaciones de Superficie
+    c('N1-A-A07', 'A07', 'TERMINACIONES DE SUPERFICIE', 'Capitulo', 'N1-BA', ['N1-A-A07-01','N1-A-A07-02']),
+    c('N1-A-A07-01', 'A070110', 'Fraguache con llana', 'Partida', 'N1-A-A07', [], 'M2', 4200, 107.10, 112, 0),
+    c('N1-A-A07-02', 'A070300', 'Panete mezcla 1:4 en paredes', 'Partida', 'N1-A-A07', [], 'M2', 3600, 520, 546, 0),
+
+    // N1 > Bloque A > A09 Pisos
+    c('N1-A-A09', 'A09', 'PISOS', 'Capitulo', 'N1-BA', ['N1-A-A09-01','N1-A-A09-02','N1-A-A09-03']),
+    c('N1-A-A09-01', 'A090110', 'Ceramica europea economica', 'Material', 'N1-A-A09', [], 'M2', 1800, 2427.74, 2550, 0),
+    c('N1-A-A09-02', 'A090120', 'Ceramica europea buena calidad', 'Material', 'N1-A-A09', [], 'M2', 5400, 2823.74, 2965, 0),
+    c('N1-A-A09-03', 'A090100', 'Adoquin barahona gris areas comunes', 'Material', 'N1-A-A09', [], 'M2', 320, 1951.72, 2050, 0),
+
+    // N1 > Bloque A > A15 Instalaciones Sanitarias
+    c('N1-A-A15', 'A15', 'INSTALACIONES SANITARIAS', 'Capitulo', 'N1-BA', ['N1-A-A15-01','N1-A-A15-02','N1-A-A15-03']),
+    c('N1-A-A15-01', 'A150100', 'Salida agua potable 1/2" polietileno', 'Partida', 'N1-A-A15', [], 'UND', 48, 2371.94, 2490, 0),
+    c('N1-A-A15-02', 'A150110', 'Salida sanitaria A.N. PVC 4" aerea', 'Partida', 'N1-A-A15', [], 'UND', 36, 3124.21, 3280, 0),
+    c('N1-A-A15-03', 'A150111', 'Salida sanitaria A.N. PVC 4" tierra', 'Partida', 'N1-A-A15', [], 'UND', 12, 3258.76, 3420, 0),
+
+    // N1 > Bloque A > A17 Instalaciones Electricas
+    c('N1-A-A17', 'A17', 'INSTALACIONES ELECTRICAS', 'Capitulo', 'N1-BA', ['N1-A-A17-01','N1-A-A17-02','N1-A-A17-03']),
+    c('N1-A-A17-01', 'A170100', 'Luz cenital', 'Partida', 'N1-A-A17', [], 'UND', 96, 2458.69, 2580, 0),
+    c('N1-A-A17-02', 'A170101', 'Luz de pared', 'Partida', 'N1-A-A17', [], 'UND', 48, 2552.41, 2680, 0),
+    c('N1-A-A17-03', 'A170110', 'Interruptor sencillo', 'Partida', 'N1-A-A17', [], 'UND', 72, 2135.89, 2240, 0),
+
+    // N1 > Bloque A > A19 Pinturas
+    c('N1-A-A19', 'A19', 'PINTURAS', 'Capitulo', 'N1-BA', ['N1-A-A19-01','N1-A-A19-02']),
+    c('N1-A-A19-01', 'A190100', 'Pintura economica interior/exterior', 'Partida', 'N1-A-A19', [], 'M2', 4200, 202.55, 213, 0),
+    c('N1-A-A19-02', 'A190110', 'Primer acrilico contractor', 'Material', 'N1-A-A19', [], 'M2', 4200, 160.91, 169, 0),
+
+    // N1 > Bloque B > A04 Hormigon
+    c('N1-B-A04', 'A04', 'HORMIGON', 'Capitulo', 'N1-BB', ['N1-B-A04-01']),
+    c('N1-B-A04-01', 'A040200', 'Columnas hormigon industrial 350kg/cm2', 'Partida', 'N1-B-A04', [], 'M3', 38, 15800, 16590, 0),
 
     // ══════════════════════════════════════
-    // NIVEL 3 → Bloques (mínimo)
+    // NIVEL 2
     // ══════════════════════════════════════
-    c('N3-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-3', ['N3-A-OG']),
-    c('N3-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'N3-BLQ-A', ['N3-A-OG-EST']),
-    c('N3-A-OG-EST', 'A4', 'ESTRUCTURA', 'Capitulo', 'N3-A-OG', ['N3-A-OG-EST-01']),
-    c('N3-A-OG-EST-01', 'A4.01', 'Hormigon armado columnas f\'c=350', 'Partida', 'N3-A-OG-EST', [], 'M3', 48, 15800, 16700, 18800),
+    c('N2-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-2', ['N2-A-A04','N2-A-A09']),
+
+    c('N2-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N2-BA', ['N2-A-A04-01','N2-A-A04-02','N2-A-A04-03']),
+    c('N2-A-A04-01', 'A040200', 'Columnas hormigon industrial 350kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 48, 15800, 16590, 0),
+    c('N2-A-A04-02', 'A040300', 'Vigas hormigon industrial 280kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 72, 14500, 15225, 0),
+    c('N2-A-A04-03', 'A040400', 'Losa maciza hormigon industrial 280kg/cm2', 'Partida', 'N2-A-A04', [], 'M3', 105, 13200, 13860, 0),
+
+    c('N2-A-A09', 'A09', 'PISOS', 'Capitulo', 'N2-BA', ['N2-A-A09-01']),
+    c('N2-A-A09-01', 'A090120', 'Ceramica europea buena calidad', 'Material', 'N2-A-A09', [], 'M2', 5200, 2823.74, 2965, 0),
 
     // ══════════════════════════════════════
-    // AZOTEA → Bloques
+    // NIVEL 3
     // ══════════════════════════════════════
-    c('AZ-BLQ-A', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-AZ', ['AZ-A-OG']),
-    c('AZ-A-OG', 'A', 'OBRA GRUESA', 'Capitulo', 'AZ-BLQ-A', ['AZ-A-OG-TEC']),
-    c('AZ-A-OG-TEC', 'A11', 'TERMINACION DE TECHOS', 'Capitulo', 'AZ-A-OG', ['AZ-A-OG-TEC-01','AZ-A-OG-TEC-02']),
-    c('AZ-A-OG-TEC-01', 'A11.01', 'Impermeabilizante asfaltico techo', 'Partida', 'AZ-A-OG-TEC', [], 'M2', 850, 480, 510, 570),
-    c('AZ-A-OG-TEC-02', 'A11.02', 'Fino de techo mezcla cemento', 'Partida', 'AZ-A-OG-TEC', [], 'M2', 850, 320, 340, 380),
+    c('N3-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-3', ['N3-A-A04']),
+    c('N3-A-A04', 'A04', 'HORMIGON', 'Capitulo', 'N3-BA', ['N3-A-A04-01']),
+    c('N3-A-A04-01', 'A040200', 'Columnas hormigon industrial 350kg/cm2', 'Partida', 'N3-A-A04', [], 'M3', 48, 15800, 16590, 0),
+
+    // ══════════════════════════════════════
+    // AZOTEA
+    // ══════════════════════════════════════
+    c('AZ-BA', 'BLQ-A', 'BLOQUE A', 'Capitulo', 'N-AZ', ['AZ-A-A11','AZ-A-A19']),
+
+    c('AZ-A-A11', 'A11', 'TERMINACION DE TECHOS', 'Capitulo', 'AZ-BA', ['AZ-A-A11-01','AZ-A-A11-02']),
+    c('AZ-A-A11-01', 'A110100', 'Fino de techo mezcla cemento', 'Partida', 'AZ-A-A11', [], 'M2', 850, 320, 336, 0),
+    c('AZ-A-A11-02', 'A110300', 'Impermeabilizante asfaltico techo', 'Partida', 'AZ-A-A11', [], 'M2', 850, 480, 504, 0),
+
+    c('AZ-A-A19', 'A19', 'PINTURAS', 'Capitulo', 'AZ-BA', ['AZ-A-A19-01']),
+    c('AZ-A-A19-01', 'A190100', 'Pintura economica exterior', 'Partida', 'AZ-A-A19', [], 'M2', 1800, 202.55, 213, 0),
   ];
 
   function calcNivel(item: typeof items[0]): number {
