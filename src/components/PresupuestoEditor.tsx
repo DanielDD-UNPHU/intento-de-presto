@@ -220,6 +220,13 @@ export function PresupuestoEditor() {
     | null
   >(null);
 
+  const handleUnify = useCallback(() => {
+    const result = store.unifySelected();
+    if (!result.ok) {
+      window.alert(result.reason ?? 'No se pudo unificar');
+    }
+  }, [store]);
+
   const openCreateComponente = useCallback(() => {
     if (store.selectedIds.size < 2) return;
     setPendingCreateIds(Array.from(store.selectedIds));
@@ -590,6 +597,7 @@ export function PresupuestoEditor() {
         onCopyAsIndependent={handleCopyAsIndependent}
         onCreateFolder={handleCreateFolder}
         onCreateComponente={openCreateComponente}
+        onUnify={handleUnify}
         hasCapituloSelected={(() => {
           const selId = store.getSelectedCapituloId();
           if (!selId) return false;

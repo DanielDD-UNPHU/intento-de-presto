@@ -666,6 +666,64 @@ export function usePresupuesto() {
     if (!parentId) setRootIds(prev => [...prev, ...newIds]);
   }, [conceptos, selectedIds]);
 
+  // ── Unificar items idénticos en uno solo (sumando cantidades) ──
+
+  /**
+   * Toma los items seleccionados y, si todos comparten el mismo parent y son
+   * "el mismo item" (misma descripción, unidad y precios), los unifica en una
+   * sola fila sumando las cantidades. Devuelve { ok, reason } para feedback UI.
+   */
+  const unifySelected = useCallback((): { ok: boolean; reason?: string } => {
+    if (selectedIds.size < 2) return { ok: false, reason: 'Selecciona al menos 2 items' };
+
+    const ids = Array.from(selectedIds);
+    const items = ids.map((id) => conceptos[id]).filter(Boolean) as ConceptoPresupuesto[];
+    if (items.length < 2) return { ok: false, reason: 'Items no encontrados' };
+
+    if (items.some((i) => i.tipo === 'Capitulo')) {
+      return { ok: false, reason: 'No se pueden unificar carpetas' };
+    }
+
+    const firstParent = items[0].parentId;
+    if (!items.every((i) => i.parentId === firstParent)) {
+      return { ok: false, reason: 'Los items deben pertenecer al mismo padre' };
+    }
+
+    const ref = items[0];
+    const sameIdentity = items.every((i) =>
+      i.descripcion === ref.descripcion &&
+      i.unidad === ref.unidad &&
+      i.precioInterno === ref.precioInterno &&
+      i.precioCliente === ref.precioCliente
+    );
+    if (!sameIdentity) {
+      return { ok: false, reason: 'Los items deben tener la misma descripción, unidad y precios' };
+    }
+
+    const totalCantidad = items.reduce((sum, i) => sum + i.cantidad, 0);
+    const keepId = ids[0];
+    const removeIds = new Set(ids.slice(1));
+
+    setConceptos((prev) => {
+      const next = { ...prev };
+      next[keepId] = { ...next[keepId], cantidad: totalCantidad };
+      // Quitar los borrados del parent
+      if (firstParent && next[firstParent]) {
+        next[firstParent] = {
+          ...next[firstParent],
+          childrenIds: next[firstParent].childrenIds.filter((cid) => !removeIds.has(cid)),
+        };
+      }
+      removeIds.forEach((rid) => { delete next[rid]; });
+      return next;
+    });
+    if (!firstParent) {
+      setRootIds((prev) => prev.filter((rid) => !removeIds.has(rid)));
+    }
+    setSelectedIds(new Set([keepId]));
+    return { ok: true };
+  }, [selectedIds, conceptos]);
+
   // ── Change tipo ──
 
   const changeTipoSelected = useCallback((tipo: NaturalezaConcepto) => {
@@ -1420,7 +1478,7 @@ export function usePresupuesto() {
     updateConcepto, setConceptoDirectly, revertOverride,
     addConcepto, addFromBC3, addFromBC3WithTarget,
     deleteSelected, moveSelected, indentSelected, outdentSelected,
-    pasteFromClipboard, changeTipoSelected,
+    pasteFromClipboard, changeTipoSelected, unifySelected,
     copyAsComponent, copyAsIndependent, propagateComponentChange, moveConceptoTo,
     getSelectedCapituloId, deleteConcepto, deleteConceptoKeepingChildren,
     // Nuevo sistema de componentes

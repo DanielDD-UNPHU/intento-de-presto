@@ -2,7 +2,7 @@ import type { NaturalezaConcepto } from '../types';
 import { TIPO_CONFIG, TIPO_LIST } from '../utils/tipoConfig';
 import {
   ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Trash2, ChevronDown, Layers,
-  Link2, Copy, FolderPlus, Shapes
+  Link2, Copy, FolderPlus, Shapes, Combine
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -19,12 +19,13 @@ interface Props {
   onCreateFolder: () => void;
   hasCapituloSelected: boolean;
   onCreateComponente: () => void;
+  onUnify: () => void;
 }
 
 export function FloatingToolbar({
   selectedCount, onMoveUp, onMoveDown, onIndent, onOutdent, onDelete, onChangeTipo,
   onCopyAsComponent, onCopyAsIndependent, onCreateFolder, hasCapituloSelected,
-  onCreateComponente,
+  onCreateComponente, onUnify,
 }: Props) {
   const [showTipoMenu, setShowTipoMenu] = useState(false);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
@@ -96,6 +97,18 @@ export function FloatingToolbar({
         >
           <Shapes size={13} />
           <span className="text-[11px] font-semibold">Crear componente</span>
+        </button>
+      )}
+
+      {/* Unificar items idénticos — suma cantidades de items duplicados */}
+      {selectedCount > 1 && (
+        <button
+          onClick={onUnify}
+          title="Unificar items idénticos (suma cantidades)"
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-emerald-300 hover:text-emerald-200 hover:bg-emerald-500/15 transition-all duration-150"
+        >
+          <Combine size={13} />
+          <span className="text-[11px] font-semibold">Unificar</span>
         </button>
       )}
 
