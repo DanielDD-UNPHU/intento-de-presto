@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import type { ConceptoPresupuesto, OverridableField, BC3DragPayload } from '../types';
+import type { ConceptoPresupuesto, OverridableField, BC3DragPayload, ComponenteInfo } from '../types';
 import { TipoBadge } from './TipoBadge';
+import { ComponenteChip } from './ComponenteChip';
 import { formatMoney } from '../utils/formatters';
-import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2, Plus } from 'lucide-react';
 import { highlightMatch } from '../utils/searchUtils';
 import { getCapituloRole, ROLE_CONFIG } from '../utils/capituloRoles';
 
@@ -28,14 +29,20 @@ interface Props {
   getTotalInterno: (id: string) => number;
   onCreateFolder: (parentId: string) => void;
   onDeleteConcepto: (id: string) => void;
+  onRequestDelete: (id: string) => void;
   zoom: number;
   searchQuery: string;
+  componentes: Record<string, ComponenteInfo>;
+  recentlyPropagatedIds: Set<string>;
+  onChipClick?: (id: string, e: React.MouseEvent) => void;
+  onAddToComponente?: (id: string) => void;
+  onContextMenuRow?: (id: string, e: React.MouseEvent) => void;
 }
 
 type EditableField = 'codigo' | 'descripcion' | 'unidad' | 'cantidad' | 'precioRef' | 'precioInterno' | 'precioCliente';
 
 const NUMERIC_FIELDS: EditableField[] = ['cantidad', 'precioRef', 'precioInterno', 'precioCliente'];
-const COL_TEMPLATE = '42px 36px 84px 1fr 48px 120px 120px 120px 120px 140px 70px';
+const COL_TEMPLATE = '42px 36px 110px 84px 1fr 48px 120px 120px 120px 120px 140px 70px';
 
 // Generate display code based on position in tree (e.g. "1.2.3")
 function buildAutoCode(id: string, conceptos: Record<string, ConceptoPresupuesto>, rootIds: string[]): string {
@@ -59,15 +66,17 @@ export function PresupuestoGrid({
   visibleIds, rootIds, conceptos, selectedIds, expandedIds, onSelect, onToggleExpand, onUpdate,
   onRevertOverride, onDropBC3, onMoveRow, dropTargetId, onSetDropTarget,
   dropPosition, onSetDropPosition, bc3DragPayload, onSetBC3DragPayload,
-  getTotal, getTotalInterno, onCreateFolder, onDeleteConcepto, zoom, searchQuery,
+  getTotal, getTotalInterno, onCreateFolder, onDeleteConcepto, onRequestDelete, zoom, searchQuery,
+  componentes, recentlyPropagatedIds, onChipClick, onAddToComponente, onContextMenuRow,
 }: Props) {
   const [editingCell, setEditingCell] = useState<{ id: string; field: EditableField } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [dragStart, setDragStart] = useState<number | null>(null);
   const [dragMode, setDragMode] = useState<'select' | 'deselect'>('select');
   const [draggingRowId, setDraggingRowId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // onDeleteConcepto kept for API compatibility but delete flow is lifted to editor
+  void onDeleteConcepto;
 
   useEffect(() => {
     if (editingCell && inputRef.current) {
@@ -425,9 +434,9 @@ export function PresupuestoGrid({
         className="col-span-full grid sticky top-0 z-10 bg-white border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase tracking-[0.08em]"
         style={{ gridTemplateColumns: 'subgrid' }}
       >
-        {['#', 'NatC', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe', ''].map(
+        {['#', 'NatC', 'Componente', 'Codigo', 'Descripcion', 'Ud', 'Cantidad', 'P.Ref', 'P.Interno', 'P.Cliente', 'Importe', ''].map(
           (label, i) => (
-            <div key={label} className={`px-2 py-2.5 ${i < 9 ? 'border-r border-slate-100' : ''} ${i >= 5 ? 'text-right' : i === 0 ? 'text-center' : ''}`}>
+            <div key={label} className={`px-2 py-2.5 ${i < 10 ? 'border-r border-slate-100' : ''} ${i >= 6 ? 'text-right' : i === 0 ? 'text-center' : i === 2 ? 'text-left' : ''}`}>
               {label}
             </div>
           )
@@ -539,6 +548,15 @@ export function PresupuestoGrid({
               onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
               onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}
+              onContextMenu={e => { if (onContextMenuRow) { e.preventDefault(); onContextMenuRow(id, e); } }}
+              onMouseDown={isChapter ? e => {
+                // No seleccionar si el click viene de un elemento interactivo (input, botón, chip).
+                const target = e.target as HTMLElement;
+                if (target.closest('[data-row-select-skip="true"]')) return;
+                if (target.closest('button, input, textarea, [role="button"]')) return;
+                handleRowMouseDown(idx, e);
+              } : undefined}
+              onMouseEnter={isChapter ? () => handleRowMouseEnter(idx) : undefined}
             >
               {/* Drop indicator line — top, bottom, or full highlight for inside */}
               {isDropTarget && dropPosition === 'before' && (
@@ -578,8 +596,28 @@ export function PresupuestoGrid({
               <div className="flex items-center justify-center border-r border-slate-100/60 relative">
                 <TipoBadge tipo={c.tipo} capituloRole={capituloRole} />
                 {isComponentSource && (
-                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 border border-white" title="Componente fuente" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-violet-500 border border-white" title="Componente fuente (legacy)" />
                 )}
+              </div>
+
+              {/* Componente — chip del nuevo sistema */}
+              <div className="border-r border-slate-100/60 flex items-center px-1.5 overflow-hidden group/comp">
+                {c.componenteId && componentes[c.componenteId] ? (
+                  <ComponenteChip
+                    info={componentes[c.componenteId]}
+                    flashing={recentlyPropagatedIds.has(id)}
+                    onClick={(e) => { e.stopPropagation(); onChipClick?.(id, e); }}
+                  />
+                ) : !isChapter ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onAddToComponente?.(id); }}
+                    className="opacity-0 group-hover/comp:opacity-100 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all"
+                    title="Agregar a componente"
+                  >
+                    <Plus size={10} strokeWidth={2.5} />
+                  </button>
+                ) : null}
               </div>
 
               {/* Codigo — auto-generated from tree position */}
@@ -593,7 +631,11 @@ export function PresupuestoGrid({
               </div>
 
               {/* Descripcion — with indentation and expand toggle */}
-              <div className="border-r border-slate-100/60">
+              <div
+                className="border-r border-slate-100/60"
+                data-row-select-skip="true"
+                onMouseDown={e => e.stopPropagation()}
+              >
                 <div className="flex items-center h-full">
                   {/* Indentation spacer based on nivel */}
                   {c.nivel > 0 && (
@@ -673,7 +715,7 @@ export function PresupuestoGrid({
                       {isRootNivel && (
                         <button
                           className="p-1 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          onClick={e => { e.stopPropagation(); setConfirmDeleteId(id); }}
+                          onClick={e => { e.stopPropagation(); onRequestDelete(id); }}
                           title="Eliminar"
                         >
                           <Trash2 size={13} />
@@ -689,46 +731,6 @@ export function PresupuestoGrid({
       )}
 
       </div>
-
-      {/* Confirm delete modal */}
-      {confirmDeleteId && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setConfirmDeleteId(null)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-[380px] p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-red-100 flex items-center justify-center">
-                <Trash2 size={18} className="text-red-600" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">Eliminar</h2>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  {conceptos[confirmDeleteId]?.descripcion}
-                </p>
-              </div>
-            </div>
-            <p className="text-[12px] text-slate-600 mb-4">
-              Se eliminara este elemento y todo su contenido. Esta accion no se puede deshacer.
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  onDeleteConcepto(confirmDeleteId);
-                  setConfirmDeleteId(null);
-                }}
-                className="flex-1 px-4 py-2.5 text-sm font-semibold bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors"
-              >
-                Si, eliminar
-              </button>
-              <button
-                onClick={() => setConfirmDeleteId(null)}
-                className="px-4 py-2.5 text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-xl"
-              >
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -8,6 +8,11 @@ import { AddBloqueNivelModal } from './AddBloqueNivelModal';
 import { ZoomControl } from './ZoomControl';
 import { TotalGeneralPanel } from './TotalGeneralPanel';
 import { SearchBar } from './SearchBar';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { CreateComponenteModal } from './CreateComponenteModal';
+import { ComponentePicker, buildCopyDestinations } from './ComponentePicker';
+import { DeleteFolderModal } from './DeleteFolderModal';
+import { groupInstancesByAnchor, findInstanceAnchor } from '../utils/componenteUtils';
 import { normalizeText } from '../utils/searchUtils';
 import { formatMoney } from '../utils/formatters';
 import { parsePastedRows } from '../utils/formatters';
@@ -16,7 +21,8 @@ import { exportToExcel } from '../utils/exportExcel';
 import { exportToPDF } from '../utils/exportPDF';
 import {
   Undo2, Redo2, FileDown, Save, Building2, TrendingUp,
-  FileSpreadsheet, FileText, FileCode
+  FileSpreadsheet, FileText, FileCode,
+  FolderTree, Unlink, Trash2, Pencil, BoxSelect, Plus,
 } from 'lucide-react';
 
 export function PresupuestoEditor() {
@@ -92,6 +98,44 @@ export function PresupuestoEditor() {
     return { visibleIds: ordered, searchMatchCount: matches.size };
   }, [searchQuery, store.conceptos, store.rootIds, baseVisibleIds]);
 
+  // ── Delete folder modal ──
+  const [deleteFolderTarget, setDeleteFolderTarget] = useState<string | null>(null);
+
+  /**
+   * Handler central de borrado individual (trash del row). Si el target es un
+   * Capitulo con hijos, abre el modal con las 3 opciones. Si no, borra directo.
+   */
+  const requestDelete = useCallback(
+    (id: string) => {
+      const item = store.conceptos[id];
+      if (!item) return;
+      const isFolderWithChildren = item.tipo === 'Capitulo' && item.childrenIds.length > 0;
+      if (isFolderWithChildren) {
+        setDeleteFolderTarget(id);
+      } else {
+        store.deleteConcepto(id);
+      }
+    },
+    [store],
+  );
+
+  /**
+   * Wrapper del botón Delete de la FloatingToolbar y la tecla Delete.
+   * Si la selección es un único Capitulo con hijos, abre el modal. Si son varios
+   * o no es carpeta, delega al deleteSelected del store.
+   */
+  const handleToolbarDelete = useCallback(() => {
+    if (store.selectedIds.size === 1) {
+      const id = Array.from(store.selectedIds)[0];
+      const item = store.conceptos[id];
+      if (item && item.tipo === 'Capitulo' && item.childrenIds.length > 0) {
+        setDeleteFolderTarget(id);
+        return;
+      }
+    }
+    store.deleteSelected();
+  }, [store]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,6 +143,17 @@ export function PresupuestoEditor() {
         e.preventDefault();
         searchInputRef.current?.focus();
         searchInputRef.current?.select();
+      }
+      // Undo / Redo
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        const active = document.activeElement;
+        if (active?.tagName === 'INPUT' || active?.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          store.redo();
+        } else {
+          store.undo();
+        }
       }
       if (e.altKey) {
         if (e.key === 'ArrowUp') { e.preventDefault(); store.moveSelected('up'); }
@@ -108,7 +163,7 @@ export function PresupuestoEditor() {
       }
       if (e.key === 'Delete' && store.selectedIds.size > 0) {
         e.preventDefault();
-        store.deleteSelected();
+        handleToolbarDelete();
       }
       if (e.key === 'Escape') store.setSelectedIds(new Set());
       if (e.key === 'Tab' && store.selectedIds.size > 0) {
@@ -121,7 +176,7 @@ export function PresupuestoEditor() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [store]);
+  }, [store, handleToolbarDelete]);
 
   // Paste from Excel
   useEffect(() => {
@@ -154,6 +209,150 @@ export function PresupuestoEditor() {
     setNewFolderName('');
     setShowFolderModal(true);
   }, []);
+
+  // ── Sistema de componentes (nuevo) ──
+  const [showCreateComponenteModal, setShowCreateComponenteModal] = useState(false);
+  const [pendingCreateIds, setPendingCreateIds] = useState<string[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; rowId: string } | null>(null);
+  const [pickerState, setPickerState] = useState<
+    | { type: 'copy-to'; componenteId: string }
+    | { type: 'add-to'; itemId: string }
+    | null
+  >(null);
+
+  const openCreateComponente = useCallback(() => {
+    if (store.selectedIds.size < 2) return;
+    setPendingCreateIds(Array.from(store.selectedIds));
+    setShowCreateComponenteModal(true);
+  }, [store.selectedIds]);
+
+  const confirmCreateComponente = useCallback(
+    (nombre: string) => {
+      if (pendingCreateIds.length === 0) return;
+      store.createComponente(pendingCreateIds, nombre);
+      setPendingCreateIds([]);
+    },
+    [pendingCreateIds, store],
+  );
+
+  const handleChipClick = useCallback(
+    (itemId: string, e: React.MouseEvent) => {
+      setContextMenu({ x: e.clientX, y: e.clientY, rowId: itemId });
+    },
+    [],
+  );
+
+  const handleAddToComponente = useCallback((itemId: string) => {
+    setPickerState({ type: 'add-to', itemId });
+  }, []);
+
+  const handleContextMenuRow = useCallback(
+    (rowId: string, e: React.MouseEvent) => {
+      setContextMenu({ x: e.clientX, y: e.clientY, rowId });
+    },
+    [],
+  );
+
+  const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    if (!contextMenu) return [];
+    const { rowId } = contextMenu;
+    const item = store.conceptos[rowId];
+    if (!item) return [];
+
+    const componenteId = item.componenteId;
+    const componenteInfo = componenteId ? store.componentes[componenteId] : undefined;
+
+    if (componenteInfo) {
+      const instanceCount = Object.values(store.conceptos).filter(
+        (c) => c.componenteId === componenteId,
+      ).length;
+      const anchorCount = groupInstancesByAnchor(store.conceptos, componenteId!).size;
+      return [
+        {
+          label: `Copiar "${componenteInfo.nombre}" a...`,
+          icon: FolderTree,
+          onClick: () => setPickerState({ type: 'copy-to', componenteId: componenteId! }),
+        },
+        {
+          label: `Seleccionar todas las instancias (${instanceCount})`,
+          icon: BoxSelect,
+          onClick: () => store.selectAllInstancesOfComponente(componenteId!),
+        },
+        { label: '', onClick: () => {}, divider: true },
+        {
+          label: 'Renombrar componente',
+          icon: Pencil,
+          onClick: () => {
+            const nombre = window.prompt('Nuevo nombre del componente:', componenteInfo.nombre);
+            if (nombre && nombre.trim()) store.renameComponente(componenteId!, nombre);
+          },
+        },
+        {
+          label: 'Hacer único (quitar del componente)',
+          icon: Unlink,
+          onClick: () => store.removeItemFromComponente(rowId),
+        },
+        { label: '', onClick: () => {}, divider: true },
+        {
+          label: `Borrar todas las instancias (${anchorCount} ${anchorCount === 1 ? 'instancia' : 'instancias'})`,
+          icon: Trash2,
+          danger: true,
+          onClick: () => {
+            if (window.confirm(`Esto eliminará "${componenteInfo.nombre}" del proyecto entero (${instanceCount} items). ¿Confirmar?`)) {
+              store.deleteAllInstancesOfComponente(componenteId!);
+            }
+          },
+        },
+      ];
+    }
+
+    // Item libre: ofrecer agregarlo a un componente
+    const hasComponentes = Object.keys(store.componentes).length > 0;
+    return [
+      {
+        label: 'Agregar al componente...',
+        icon: Plus,
+        disabled: !hasComponentes,
+        onClick: () => setPickerState({ type: 'add-to', itemId: rowId }),
+      },
+    ];
+  }, [contextMenu, store]);
+
+  const copyDestinations = useMemo(() => {
+    if (pickerState?.type !== 'copy-to') return [];
+    const groups = groupInstancesByAnchor(store.conceptos, pickerState.componenteId);
+    const excluded = new Set<string>(groups.keys());
+    return buildCopyDestinations(store.conceptos, store.rootIds, excluded);
+  }, [pickerState, store.conceptos, store.rootIds]);
+
+  const confirmCopyTo = useCallback(
+    (destId: string) => {
+      if (pickerState?.type !== 'copy-to') return;
+      const result = store.copyComponenteTo(pickerState.componenteId, destId);
+      if (!result.ok) {
+        window.alert(result.reason ?? 'No se pudo copiar');
+      }
+    },
+    [pickerState, store],
+  );
+
+  const confirmAddTo = useCallback(
+    (componenteId: string) => {
+      if (pickerState?.type !== 'add-to') return;
+      const groups = groupInstancesByAnchor(store.conceptos, componenteId);
+      const otherInstances = groups.size;
+      const sourceAnchor = findInstanceAnchor(store.conceptos, pickerState.itemId);
+      const replicaCount = sourceAnchor && groups.has(sourceAnchor) ? otherInstances - 1 : otherInstances;
+      if (replicaCount > 0) {
+        const ok = window.confirm(
+          `Esto agregará el item a las otras ${replicaCount} ${replicaCount === 1 ? 'instancia' : 'instancias'} del componente. ¿Confirmar?`,
+        );
+        if (!ok) return;
+      }
+      store.addItemToComponente(pickerState.itemId, componenteId);
+    },
+    [pickerState, store],
+  );
 
   const handleConfirmFolder = useCallback(() => {
     if (!newFolderName.trim()) return;
@@ -214,10 +413,20 @@ export function PresupuestoEditor() {
             <div className="w-px h-8 bg-slate-200" />
 
             <div className="flex items-center gap-0.5 relative">
-              <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Deshacer">
+              <button
+                onClick={store.undo}
+                disabled={!store.canUndo}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="Deshacer (Ctrl+Z)"
+              >
                 <Undo2 size={15} strokeWidth={2} />
               </button>
-              <button className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors" title="Rehacer">
+              <button
+                onClick={store.redo}
+                disabled={!store.canRedo}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                title="Rehacer (Ctrl+Shift+Z)"
+              >
                 <Redo2 size={15} strokeWidth={2} />
               </button>
               <button
@@ -352,6 +561,12 @@ export function PresupuestoEditor() {
               store.setSelectedIds(new Set([parentId]));
             }}
             onDeleteConcepto={store.deleteConcepto}
+            onRequestDelete={requestDelete}
+            componentes={store.componentes}
+            recentlyPropagatedIds={store.recentlyPropagatedIds}
+            onChipClick={handleChipClick}
+            onAddToComponente={handleAddToComponente}
+            onContextMenuRow={handleContextMenuRow}
           />
           <TotalGeneralPanel
             height={footerHeight}
@@ -369,11 +584,12 @@ export function PresupuestoEditor() {
         onMoveDown={() => store.moveSelected('down')}
         onIndent={store.indentSelected}
         onOutdent={store.outdentSelected}
-        onDelete={store.deleteSelected}
+        onDelete={handleToolbarDelete}
         onChangeTipo={store.changeTipoSelected}
         onCopyAsComponent={handleCopyAsComponent}
         onCopyAsIndependent={handleCopyAsIndependent}
         onCreateFolder={handleCreateFolder}
+        onCreateComponente={openCreateComponente}
         hasCapituloSelected={(() => {
           const selId = store.getSelectedCapituloId();
           if (!selId) return false;
@@ -431,6 +647,63 @@ export function PresupuestoEditor() {
           componentSources={store.componentSources}
           onPropagate={store.propagateComponentChange}
           onClose={() => store.setPendingPropagation(null)}
+        />
+      )}
+
+      {/* ── Modal eliminar carpeta con hijos ── */}
+      {deleteFolderTarget && store.conceptos[deleteFolderTarget] && (
+        <DeleteFolderModal
+          open
+          folderName={store.conceptos[deleteFolderTarget].descripcion || '(sin nombre)'}
+          childCount={store.conceptos[deleteFolderTarget].childrenIds.length}
+          onDeleteAll={() => {
+            store.deleteConcepto(deleteFolderTarget);
+            setDeleteFolderTarget(null);
+          }}
+          onKeepChildren={() => {
+            store.deleteConceptoKeepingChildren(deleteFolderTarget);
+            setDeleteFolderTarget(null);
+          }}
+          onClose={() => setDeleteFolderTarget(null)}
+        />
+      )}
+
+      {/* ── Context menu de componentes ── */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* ── Modal crear componente ── */}
+      <CreateComponenteModal
+        open={showCreateComponenteModal}
+        selectedCount={pendingCreateIds.length}
+        onConfirm={confirmCreateComponente}
+        onClose={() => { setShowCreateComponenteModal(false); setPendingCreateIds([]); }}
+      />
+
+      {/* ── Picker: copiar componente a / agregar al componente ── */}
+      {pickerState?.type === 'copy-to' && store.componentes[pickerState.componenteId] && (
+        <ComponentePicker
+          mode="copy-to"
+          open
+          componenteInfo={store.componentes[pickerState.componenteId]}
+          destinations={copyDestinations}
+          onPick={confirmCopyTo}
+          onClose={() => setPickerState(null)}
+        />
+      )}
+      {pickerState?.type === 'add-to' && (
+        <ComponentePicker
+          mode="add-to"
+          open
+          componentes={store.componentes}
+          onPick={confirmAddTo}
+          onClose={() => setPickerState(null)}
         />
       )}
 

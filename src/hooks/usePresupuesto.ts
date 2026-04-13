@@ -2,10 +2,17 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import type {
   ConceptoPresupuesto, NaturalezaConcepto, OverridableField,
-  BC3DragPayload, ComponentSource, PendingPropagation
+  BC3DragPayload, ComponentSource, PendingPropagation, ComponenteInfo
 } from '../types';
 import { createMockPresupuesto, mockRootIds } from '../data/mockPresupuesto';
 import { deepCloneSubtree } from '../utils/componentUtils';
+import {
+  createComponenteInfo,
+  newSlotId,
+  findInstanceIdsByComponenteId,
+  groupInstancesByAnchor,
+  findInstanceAnchor,
+} from '../utils/componenteUtils';
 
 const OVERRIDABLE_FIELDS: OverridableField[] = ['precioInterno', 'precioCliente', 'cantidad', 'descripcion', 'unidad'];
 
@@ -22,6 +29,72 @@ export function usePresupuesto() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [componentSources, setComponentSources] = useState<Record<string, ComponentSource>>({});
   const [pendingPropagation, setPendingPropagation] = useState<PendingPropagation | null>(null);
+  const [componentes, setComponentes] = useState<Record<string, ComponenteInfo>>({});
+  const [recentlyPropagatedIds, setRecentlyPropagatedIds] = useState<Set<string>>(new Set());
+
+  // ── History (undo/redo) ──
+  interface HistorySnapshot {
+    conceptos: Record<string, ConceptoPresupuesto>;
+    rootIds: string[];
+    componentes: Record<string, ComponenteInfo>;
+  }
+  const HISTORY_CAP = 50;
+  const historyRef = useRef<{ past: HistorySnapshot[]; future: HistorySnapshot[] }>({ past: [], future: [] });
+  const lastSnapshotRef = useRef<HistorySnapshot>({ conceptos, rootIds, componentes });
+  const suppressSnapshotRef = useRef(false);
+  const [historyVersion, setHistoryVersion] = useState(0);
+
+  useEffect(() => {
+    const prev = lastSnapshotRef.current;
+    if (
+      prev.conceptos === conceptos &&
+      prev.rootIds === rootIds &&
+      prev.componentes === componentes
+    ) {
+      return;
+    }
+    if (suppressSnapshotRef.current) {
+      suppressSnapshotRef.current = false;
+      lastSnapshotRef.current = { conceptos, rootIds, componentes };
+      return;
+    }
+    historyRef.current.past.push(prev);
+    if (historyRef.current.past.length > HISTORY_CAP) {
+      historyRef.current.past.shift();
+    }
+    historyRef.current.future = [];
+    lastSnapshotRef.current = { conceptos, rootIds, componentes };
+    setHistoryVersion((v) => v + 1);
+  }, [conceptos, rootIds, componentes]);
+
+  const undo = useCallback(() => {
+    if (historyRef.current.past.length === 0) return;
+    const prev = historyRef.current.past.pop()!;
+    historyRef.current.future.push(lastSnapshotRef.current);
+    suppressSnapshotRef.current = true;
+    setConceptos(prev.conceptos);
+    setRootIds(prev.rootIds);
+    setComponentes(prev.componentes);
+    setSelectedIds(new Set());
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+  const redo = useCallback(() => {
+    if (historyRef.current.future.length === 0) return;
+    const next = historyRef.current.future.pop()!;
+    historyRef.current.past.push(lastSnapshotRef.current);
+    suppressSnapshotRef.current = true;
+    setConceptos(next.conceptos);
+    setRootIds(next.rootIds);
+    setComponentes(next.componentes);
+    setSelectedIds(new Set());
+    setHistoryVersion((v) => v + 1);
+  }, []);
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const _historyVersionTick = historyVersion; // force re-render on history change
+  const canUndo = historyRef.current.past.length > 0;
+  const canRedo = historyRef.current.future.length > 0;
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
   const [bc3DragPayload, setBC3DragPayload] = useState<BC3DragPayload | null>(null);
@@ -145,8 +218,9 @@ export function usePresupuesto() {
 
       const hasOverrides = Object.keys(newOverrides).length > 0;
       const updated = { ...c, ...updates, overrides: hasOverrides ? newOverrides : undefined };
+      const next = { ...prev, [id]: updated };
 
-      // Trigger propagation dialog if this is a component source
+      // Trigger propagation dialog if this is a component source (sistema viejo)
       if (c.isComponentSource) {
         const changedFields = OVERRIDABLE_FIELDS.filter(f => f in updates && updates[f as keyof ConceptoPresupuesto] !== c[f as keyof ConceptoPresupuesto]);
         if (changedFields.length > 0) {
@@ -154,7 +228,41 @@ export function usePresupuesto() {
         }
       }
 
-      return { ...prev, [id]: updated };
+      // Propagación automática del nuevo sistema (tag-based).
+      // Si el item editado tiene componenteId + componenteSlotId, replicar el cambio
+      // a todos los items linkeados, excepto aquellos con override en ese campo.
+      if (c.componenteId && c.componenteSlotId) {
+        const changedFields = OVERRIDABLE_FIELDS.filter(
+          (f) => f in updates && updates[f as keyof ConceptoPresupuesto] !== c[f as keyof ConceptoPresupuesto]
+        );
+        if (changedFields.length > 0) {
+          const propagated = new Set<string>();
+          for (const otherId of Object.keys(next)) {
+            if (otherId === id) continue;
+            const other = next[otherId];
+            if (other.componenteId !== c.componenteId || other.componenteSlotId !== c.componenteSlotId) continue;
+
+            const otherPatch: Partial<ConceptoPresupuesto> = {};
+            let touched = false;
+            for (const field of changedFields) {
+              // Override gana sobre propagación
+              if (other.overrides && field in other.overrides) continue;
+              (otherPatch as Record<string, unknown>)[field] = updates[field as keyof ConceptoPresupuesto];
+              touched = true;
+            }
+            if (touched) {
+              next[otherId] = { ...other, ...otherPatch };
+              propagated.add(otherId);
+            }
+          }
+          if (propagated.size > 0) {
+            setRecentlyPropagatedIds(propagated);
+            setTimeout(() => setRecentlyPropagatedIds(new Set()), 300);
+          }
+        }
+      }
+
+      return next;
     });
   }, []);
 
@@ -700,6 +808,309 @@ export function usePresupuesto() {
     setPendingPropagation(null);
   }, [componentSources]);
 
+  // ── Nuevo sistema de componentes (tag-based) ──
+
+  const createComponente = useCallback((itemIds: string[], nombre: string): string | null => {
+    if (itemIds.length === 0 || !nombre.trim()) return null;
+    let createdId: string | null = null;
+    setComponentes((prevComps) => {
+      const info = createComponenteInfo(nombre, prevComps);
+      createdId = info.id;
+      setConceptos((prev) => {
+        const next = { ...prev };
+        for (const itemId of itemIds) {
+          const item = next[itemId];
+          if (!item) continue;
+          next[itemId] = {
+            ...item,
+            componenteId: info.id,
+            componenteSlotId: newSlotId(),
+          };
+        }
+        return next;
+      });
+      return { ...prevComps, [info.id]: info };
+    });
+    return createdId;
+  }, []);
+
+  const renameComponente = useCallback((componenteId: string, nombre: string) => {
+    if (!nombre.trim()) return;
+    setComponentes((prev) => {
+      if (!prev[componenteId]) return prev;
+      return { ...prev, [componenteId]: { ...prev[componenteId], nombre: nombre.trim() } };
+    });
+  }, []);
+
+  const changeComponenteColor = useCallback((componenteId: string, color: string) => {
+    setComponentes((prev) => {
+      if (!prev[componenteId]) return prev;
+      return { ...prev, [componenteId]: { ...prev[componenteId], color } };
+    });
+  }, []);
+
+  const removeItemFromComponente = useCallback((itemId: string) => {
+    setConceptos((prev) => {
+      const item = prev[itemId];
+      if (!item?.componenteId) return prev;
+      const removedComponenteId = item.componenteId;
+      const next = {
+        ...prev,
+        [itemId]: { ...item, componenteId: undefined, componenteSlotId: undefined },
+      };
+      // Cleanup: si este era el último item del componente, purgar el ComponenteInfo
+      const stillUsed = Object.values(next).some((c) => c.componenteId === removedComponenteId);
+      if (!stillUsed) {
+        setComponentes((prevComps) => {
+          if (!prevComps[removedComponenteId]) return prevComps;
+          const { [removedComponenteId]: _removed, ...rest } = prevComps;
+          return rest;
+        });
+      }
+      return next;
+    });
+  }, []);
+
+  const selectAllInstancesOfComponente = useCallback((componenteId: string) => {
+    const ids = findInstanceIdsByComponenteId(conceptosRef.current, componenteId);
+    setSelectedIds(new Set(ids));
+  }, []);
+
+  const deleteAllInstancesOfComponente = useCallback((componenteId: string) => {
+    setConceptos((prev) => {
+      const next = { ...prev };
+      const ids = Object.values(next).filter((c) => c.componenteId === componenteId).map((c) => c.id);
+      const idsToDelete = new Set<string>();
+
+      function collect(cid: string) {
+        idsToDelete.add(cid);
+        next[cid]?.childrenIds.forEach(collect);
+      }
+      ids.forEach(collect);
+
+      // Unlink from parents
+      idsToDelete.forEach((cid) => {
+        const c = next[cid];
+        if (c?.parentId && next[c.parentId] && !idsToDelete.has(c.parentId)) {
+          next[c.parentId] = {
+            ...next[c.parentId],
+            childrenIds: next[c.parentId].childrenIds.filter((x) => !idsToDelete.has(x)),
+          };
+        }
+      });
+
+      idsToDelete.forEach((cid) => delete next[cid]);
+      return next;
+    });
+
+    setRootIds((prev) => prev.filter((rid) => {
+      const c = conceptosRef.current[rid];
+      return !(c && c.componenteId === componenteId);
+    }));
+
+    setComponentes((prev) => {
+      if (!prev[componenteId]) return prev;
+      const { [componenteId]: _removed, ...rest } = prev;
+      return rest;
+    });
+
+    setSelectedIds(new Set());
+  }, []);
+
+  /**
+   * Copia un componente completo a un destino (Capitulo/Bloque/Nivel).
+   * Para cada item del componente, reconstruye su cadena BC3 bajo el destino
+   * y crea un clon preservando componenteId + componenteSlotId → el clon queda
+   * automáticamente linkeado al original.
+   */
+  const copyComponenteTo = useCallback((componenteId: string, targetParentId: string): { ok: boolean; reason?: string } => {
+    const snap = conceptosRef.current;
+    const target = snap[targetParentId];
+    if (!target) return { ok: false, reason: 'Destino no existe' };
+
+    // Bloquear duplicados: si el destino ya tiene items con este componenteId, abortar
+    const targetAnchor = findInstanceAnchor(snap, targetParentId) ?? targetParentId;
+    const existingGroups = groupInstancesByAnchor(snap, componenteId);
+    if (existingGroups.has(targetAnchor)) {
+      return { ok: false, reason: 'El destino ya tiene una instancia de este componente' };
+    }
+
+    const sourceIds = findInstanceIdsByComponenteId(snap, componenteId);
+    if (sourceIds.length === 0) return { ok: false, reason: 'No hay items en el componente' };
+
+    setConceptos((prev) => {
+      const next = { ...prev };
+
+      // Helper: reconstruir cadena BC3 de un item bajo targetParentId
+      function ensureBC3ChainForItem(itemId: string): string {
+        const chain: ConceptoPresupuesto[] = [];
+        let cur = next[itemId];
+        while (cur?.parentId) {
+          const parent = next[cur.parentId];
+          if (!parent) break;
+          if (parent.tipo === 'Capitulo' && parent.codigo.endsWith('#')) {
+            chain.push(parent);
+          }
+          cur = parent;
+        }
+        // chain va de padre-inmediato → arriba; para crear hay que ir top-down
+        const topDown = [...chain].reverse();
+        let currentParent = targetParentId;
+        for (const cap of topDown) {
+          const siblings = next[currentParent]?.childrenIds ?? [];
+          const existing = siblings.find((sid) => next[sid]?.codigo === cap.codigo);
+          if (existing) {
+            currentParent = existing;
+          } else {
+            const newCapId = uuidv4();
+            const parentConcepto = next[currentParent];
+            const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            next[newCapId] = {
+              id: newCapId,
+              codigo: cap.codigo,
+              descripcion: cap.descripcion,
+              tipo: 'Capitulo',
+              unidad: '',
+              cantidad: 0,
+              precioRef: 0,
+              precioInterno: 0,
+              precioCliente: 0,
+              parentId: currentParent,
+              childrenIds: [],
+              nivel,
+              orden: siblings.length,
+            };
+            next[currentParent] = {
+              ...next[currentParent],
+              childrenIds: [...next[currentParent].childrenIds, newCapId],
+            };
+            currentParent = newCapId;
+          }
+        }
+        return currentParent;
+      }
+
+      for (const srcId of sourceIds) {
+        const source = next[srcId];
+        if (!source) continue;
+        const destFolderId = ensureBC3ChainForItem(srcId);
+        const destFolder = next[destFolderId];
+        const newId = uuidv4();
+        next[newId] = {
+          ...source,
+          id: newId,
+          parentId: destFolderId,
+          childrenIds: [],
+          nivel: destFolder ? destFolder.nivel + 1 : 0,
+          orden: destFolder?.childrenIds.length ?? 0,
+          overrides: undefined,
+          // Preservar componenteId y componenteSlotId → linkeado automáticamente
+        };
+        next[destFolderId] = {
+          ...next[destFolderId],
+          childrenIds: [...next[destFolderId].childrenIds, newId],
+        };
+      }
+
+      return next;
+    });
+
+    return { ok: true };
+  }, []);
+
+  /**
+   * Agrega un item libre a un componente existente. Genera un nuevo slotId para
+   * el item y replica un item equivalente a todas las otras instancias del
+   * componente en el proyecto (mismo slotId, mismo folder BC3 bajo cada anchor).
+   */
+  const addItemToComponente = useCallback((itemId: string, componenteId: string) => {
+    const snap = conceptosRef.current;
+    const item = snap[itemId];
+    if (!item) return;
+    const slotId = newSlotId();
+
+    setConceptos((prev) => {
+      const next = { ...prev };
+      next[itemId] = { ...next[itemId], componenteId, componenteSlotId: slotId };
+
+      // Replicar a otras instancias del componente
+      const groups = groupInstancesByAnchor(next, componenteId);
+      const sourceAnchor = findInstanceAnchor(next, itemId);
+
+      // Helper: reconstruir cadena BC3 del item bajo un anchor destino
+      function ensureBC3ChainUnder(anchorId: string, sourceItemId: string): string {
+        const chain: ConceptoPresupuesto[] = [];
+        let cur = next[sourceItemId];
+        while (cur?.parentId && cur.parentId !== anchorId) {
+          const parent = next[cur.parentId];
+          if (!parent) break;
+          if (parent.tipo === 'Capitulo' && parent.codigo.endsWith('#')) {
+            chain.push(parent);
+          }
+          cur = parent;
+        }
+        const topDown = [...chain].reverse();
+        let currentParent = anchorId;
+        for (const cap of topDown) {
+          const siblings = next[currentParent]?.childrenIds ?? [];
+          const existing = siblings.find((sid) => next[sid]?.codigo === cap.codigo);
+          if (existing) {
+            currentParent = existing;
+          } else {
+            const newCapId = uuidv4();
+            const parentConcepto = next[currentParent];
+            const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            next[newCapId] = {
+              id: newCapId,
+              codigo: cap.codigo,
+              descripcion: cap.descripcion,
+              tipo: 'Capitulo',
+              unidad: '',
+              cantidad: 0,
+              precioRef: 0,
+              precioInterno: 0,
+              precioCliente: 0,
+              parentId: currentParent,
+              childrenIds: [],
+              nivel,
+              orden: siblings.length,
+            };
+            next[currentParent] = {
+              ...next[currentParent],
+              childrenIds: [...next[currentParent].childrenIds, newCapId],
+            };
+            currentParent = newCapId;
+          }
+        }
+        return currentParent;
+      }
+
+      for (const [anchorId] of groups) {
+        if (anchorId === sourceAnchor) continue;
+        const destFolderId = ensureBC3ChainUnder(anchorId, itemId);
+        const destFolder = next[destFolderId];
+        const newId = uuidv4();
+        next[newId] = {
+          ...item,
+          id: newId,
+          parentId: destFolderId,
+          childrenIds: [],
+          nivel: destFolder ? destFolder.nivel + 1 : 0,
+          orden: destFolder?.childrenIds.length ?? 0,
+          overrides: undefined,
+          componenteId,
+          componenteSlotId: slotId,
+        };
+        next[destFolderId] = {
+          ...next[destFolderId],
+          childrenIds: [...next[destFolderId].childrenIds, newId],
+        };
+      }
+
+      return next;
+    });
+  }, []);
+
   // ── Move concepto via drag & drop ──
 
   const moveConceptoTo = useCallback((dragId: string, targetId: string | null, position: 'inside' | 'before' | 'after') => {
@@ -743,8 +1154,22 @@ export function usePresupuesto() {
 
       // Ensure BC3 folder chain exists at destination, matching by CODIGO
       function ensureBC3Chain(parentId: string): string {
-        // bc3Caps is [immediate parent, grandparent, ...] — reverse to create top-down
-        const toCreate = [...bc3Caps].reverse();
+        // Si el destino YA vive dentro de alguno de los caps BC3 del item,
+        // no los recreamos arriba (causaba duplicados tipo "PINTURAS" dentro de
+        // "PINTURAS"). Recolectamos los códigos BC3 ya presentes en la cadena
+        // de ancestros del destino (incluyéndolo) y los filtramos de toCreate.
+        const destBC3Codes = new Set<string>();
+        let destCur: ConceptoPresupuesto | undefined = next[parentId];
+        while (destCur) {
+          if (destCur.tipo === 'Capitulo' && destCur.codigo.endsWith('#')) {
+            destBC3Codes.add(destCur.codigo);
+          }
+          destCur = destCur.parentId ? next[destCur.parentId] : undefined;
+        }
+
+        const capsToCreate = bc3Caps.filter(c => !destBC3Codes.has(c.codigo));
+        // capsToCreate is [immediate parent, grandparent, ...] — reverse to create top-down
+        const toCreate = [...capsToCreate].reverse();
         let currentParent = parentId;
 
         for (const cap of toCreate) {
@@ -877,6 +1302,65 @@ export function usePresupuesto() {
     setSelectedIds(new Set());
   }, []);
 
+  /**
+   * Borra un Capitulo pero preserva sus hijos moviéndolos al parent (abuelo).
+   * Si el Capitulo es raíz (sin parent), los hijos se vuelven raíces.
+   */
+  const deleteConceptoKeepingChildren = useCallback((id: string) => {
+    setConceptos((prev) => {
+      const c = prev[id];
+      if (!c) return prev;
+      const next = { ...prev };
+      const parentId = c.parentId;
+      const childIds = [...c.childrenIds];
+      const newNivel = parentId ? (next[parentId]?.nivel ?? 0) + 1 : 0;
+
+      // Reasignar cada hijo al nuevo parent
+      for (const childId of childIds) {
+        const child = next[childId];
+        if (!child) continue;
+        next[childId] = { ...child, parentId };
+      }
+
+      // Actualizar nivels recursivamente en el subárbol de cada hijo
+      function updateNivels(nid: string, nivel: number) {
+        const n = next[nid];
+        if (!n) return;
+        if (n.nivel !== nivel) next[nid] = { ...n, nivel };
+        n.childrenIds.forEach((cid) => updateNivels(cid, nivel + 1));
+      }
+      childIds.forEach((cid) => updateNivels(cid, newNivel));
+
+      // Insertar los hijos en el lugar donde estaba el Capitulo en la lista del parent
+      if (parentId && next[parentId]) {
+        const siblings = [...next[parentId].childrenIds];
+        const idx = siblings.indexOf(id);
+        if (idx >= 0) {
+          siblings.splice(idx, 1, ...childIds);
+        } else {
+          siblings.push(...childIds);
+        }
+        next[parentId] = { ...next[parentId], childrenIds: siblings };
+      }
+
+      delete next[id];
+      return next;
+    });
+
+    // Si era root, reemplazar en rootIds por sus hijos
+    setRootIds((prev) => {
+      const c = conceptosRef.current[id];
+      if (!c || c.parentId) return prev.filter((rid) => rid !== id);
+      const idx = prev.indexOf(id);
+      if (idx < 0) return prev;
+      const out = [...prev];
+      out.splice(idx, 1, ...c.childrenIds);
+      return out;
+    });
+
+    setSelectedIds(new Set());
+  }, []);
+
   const getSelectedCapituloId = useCallback((): string | null => {
     if (selectedIds.size !== 1) return null;
     const id = Array.from(selectedIds)[0];
@@ -896,6 +1380,13 @@ export function usePresupuesto() {
     deleteSelected, moveSelected, indentSelected, outdentSelected,
     pasteFromClipboard, changeTipoSelected,
     copyAsComponent, copyAsIndependent, propagateComponentChange, moveConceptoTo,
-    getSelectedCapituloId, deleteConcepto,
+    getSelectedCapituloId, deleteConcepto, deleteConceptoKeepingChildren,
+    // Nuevo sistema de componentes
+    componentes, recentlyPropagatedIds,
+    createComponente, renameComponente, changeComponenteColor,
+    removeItemFromComponente, selectAllInstancesOfComponente,
+    deleteAllInstancesOfComponente, copyComponenteTo, addItemToComponente,
+    // Undo / Redo
+    undo, redo, canUndo, canRedo,
   };
 }

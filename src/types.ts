@@ -39,9 +39,20 @@ export interface ConceptoPresupuesto {
   // Override tracking — stores ORIGINAL values. Current value on concept IS the override.
   overrides?: FieldOverrides;
 
-  // Component system
+  // Component system (legacy — a deprecar cuando el nuevo sistema esté verificado)
   componentSourceId?: string;   // This concept is an instance of that source
   isComponentSource?: boolean;  // This concept is a reusable template
+
+  // Nuevo sistema de componentes (tag-based)
+  componenteId?: string;        // A qué componente pertenezco
+  componenteSlotId?: string;    // Qué papel cumplo dentro del componente (para sincronizar ediciones)
+}
+
+export interface ComponenteInfo {
+  id: string;           // "comp-7a9f"
+  nombre: string;       // "Apartamento Tipo Bloque B"
+  color: string;        // hex, asignado automáticamente de la paleta
+  createdAt: string;    // ISO timestamp
 }
 
 export interface BC3Item {

@@ -2,7 +2,7 @@ import type { NaturalezaConcepto } from '../types';
 import { TIPO_CONFIG, TIPO_LIST } from '../utils/tipoConfig';
 import {
   ArrowUp, ArrowDown, ArrowRight, ArrowLeft, Trash2, ChevronDown, Layers,
-  Link2, Copy, FolderPlus
+  Link2, Copy, FolderPlus, Shapes
 } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -18,11 +18,13 @@ interface Props {
   onCopyAsIndependent: () => void;
   onCreateFolder: () => void;
   hasCapituloSelected: boolean;
+  onCreateComponente: () => void;
 }
 
 export function FloatingToolbar({
   selectedCount, onMoveUp, onMoveDown, onIndent, onOutdent, onDelete, onChangeTipo,
   onCopyAsComponent, onCopyAsIndependent, onCreateFolder, hasCapituloSelected,
+  onCreateComponente,
 }: Props) {
   const [showTipoMenu, setShowTipoMenu] = useState(false);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
@@ -83,6 +85,18 @@ export function FloatingToolbar({
         <Btn onClick={onCreateFolder} title="Nueva carpeta dentro">
           <FolderPlus size={15} />
         </Btn>
+      )}
+
+      {/* Crear componente — solo con multi-selección */}
+      {selectedCount > 1 && (
+        <button
+          onClick={onCreateComponente}
+          title="Crear componente de la selección"
+          className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-sky-300 hover:text-sky-200 hover:bg-sky-500/15 transition-all duration-150"
+        >
+          <Shapes size={13} />
+          <span className="text-[11px] font-semibold">Crear componente</span>
+        </button>
       )}
 
       <div className="w-px h-7 bg-white/10" />
