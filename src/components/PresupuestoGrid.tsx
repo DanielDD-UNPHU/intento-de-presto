@@ -256,30 +256,35 @@ export function PresupuestoGrid({
     // Target must be a Capitulo to receive a drop
     if (target.tipo !== 'Capitulo') return false;
 
-    // Si el arrastrado es una BC3 cap, aplicar reglas de jerarquía BC3 por
-    // FAMILIA (no solo por nivel). Un BC3 cap solo puede anidarse dentro de su
-    // linaje natural: el target debe ser un ancestro BC3 legítimo (su código
-    // sin # debe ser prefijo estricto del código del drag sin #).
+    // ── Arrastrado es BC3 cap (Capitulo con código #) ──
     const dragLevel = getBC3Level(drag);
     if (dragLevel !== null) {
       const targetLevel = getBC3Level(target);
       if (targetLevel !== null) {
-        if (position === 'inside') {
-          // Inside: solo si target es ancestro legítimo en la misma familia.
-          // Bloquea HORMIGON dentro de MAMPOSTERIA, A04# dentro de M01#, etc.
-          return isBC3Ancestor(target, drag);
-        }
-        // Before/after entre BC3 caps de distintos parents: exigimos mismo
-        // nivel (ya cubrimos el caso siblings-con-mismo-parent arriba con el
-        // early return). Cross-parent reorder a otra familia se bloquea.
+        if (position === 'inside') return isBC3Ancestor(target, drag);
         return targetLevel === dragLevel;
       }
-      // Target es Capitulo NO BC3 (folder/bloque/nivel) — siempre OK
-      return true;
+      return true; // BC3 cap dentro de container no-BC3 (folder/bloque/nivel) OK
     }
 
-    // Arrastrado es item o cap no-BC3 (folder/bloque) — cualquier Capitulo OK
-    return true;
+    // ── Arrastrado es ITEM (Material, Partida, etc) ──
+    if (drag.tipo !== 'Capitulo') {
+      const targetLevel = getBC3Level(target);
+      if (targetLevel !== null) {
+        // Drop sobre BC3 cap: el item debe pertenecer a su familia.
+        // Usamos codigoBC3 si está, sino codigo (mock items tienen el código
+        // BC3 directamente en codigo). Comparación: el código del item debe
+        // empezar con el código del target (sin #).
+        const itemCode = drag.codigoBC3 || drag.codigo;
+        if (!itemCode) return false; // item sin código no puede ir a BC3
+        const targetCode = target.codigo.slice(0, -1);
+        return itemCode.startsWith(targetCode);
+      }
+      return true; // item dentro de container no-BC3 OK
+    }
+
+    // ── Arrastrado es Capitulo no-BC3 (folder/bloque/nivel) ──
+    return true; // org containers van a cualquier lado
   }, [draggingRowId, conceptos]);
 
   // Drop handlers — supports BC3 items and internal row reordering
