@@ -248,25 +248,13 @@ export function PresupuestoGrid({
     // Reorder among siblings is always OK
     if (target.parentId === drag.parentId) return true;
 
-    // Can drop on a Nivel or Bloque (item will auto-organize)
-    if (target.tipo === 'Capitulo') {
-      if (isNivel(targetId) || isBloque(targetId)) return true;
-
-      // For other Capitulos, only allow if same BC3 category
-      const dragChain = getBC3Chain(draggingRowId);
-      const targetCode = target.codigo;
-
-      // Target is a BC3 category — check if it matches the dragged item's chain
-      if (dragChain.subCat && targetCode === dragChain.subCat) return true;
-      if (dragChain.subSubCat && targetCode === dragChain.subSubCat) return true;
-
-      // Target contains the right category as a child
-      // (e.g. target is a bloque-like structure that has A04# inside)
-      return false;
-    }
+    // Permitir drop sobre cualquier Capitulo: Nivel, Bloque, Folder custom, o
+    // cualquier BC3 cap (categoría A#, subcategoría A04#, subsubcategoría A0402#).
+    // El reorganizado de la cadena BC3 lo hace ensureBC3Chain en el hook.
+    if (target.tipo === 'Capitulo') return true;
 
     return false;
-  }, [draggingRowId, conceptos, isNivel, isBloque, getBC3Chain]);
+  }, [draggingRowId, conceptos]);
 
   // Drop handlers — supports BC3 items and internal row reordering
   const handleDragOver = useCallback((e: React.DragEvent, targetId: string | null) => {

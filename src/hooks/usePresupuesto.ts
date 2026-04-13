@@ -1253,7 +1253,33 @@ export function usePresupuesto() {
       }
       updateNivels(dragId, next[dragId].nivel);
 
-      if (newRoots) setRootIds(newRoots);
+      // Cleanup: al mover un item fuera de su cadena BC3 original, borrar las
+      // carpetas BC3 que quedaron vacías. Se detiene al llegar a una carpeta
+      // custom / bloque / nivel o una BC3 con contenido.
+      if (oldParentId && oldParentId !== finalParentId) {
+        let cursor: string | null = oldParentId;
+        while (cursor) {
+          const node = next[cursor];
+          if (!node) break;
+          const isBC3Cap = node.tipo === 'Capitulo' && node.codigo.endsWith('#');
+          if (!isBC3Cap) break;
+          if (node.childrenIds.length > 0) break;
+          const nextCursor: string | null = node.parentId;
+          // Desvincular del parent
+          if (nextCursor && next[nextCursor]) {
+            next[nextCursor] = {
+              ...next[nextCursor],
+              childrenIds: next[nextCursor].childrenIds.filter((cid) => cid !== cursor),
+            };
+          } else {
+            // Era un root (raro para una BC3 cap, pero por si acaso)
+            if (!newRoots) newRoots = rootIds.filter((rid) => rid !== cursor);
+            else newRoots = newRoots.filter((rid) => rid !== cursor);
+          }
+          delete next[cursor];
+          cursor = nextCursor;
+        }
+      }
 
       // Auto-expand the path
       setExpandedIds(prev => {
@@ -1266,6 +1292,8 @@ export function usePresupuesto() {
         }
         return expanded;
       });
+
+      if (newRoots) setRootIds(newRoots);
 
       return next;
     });
