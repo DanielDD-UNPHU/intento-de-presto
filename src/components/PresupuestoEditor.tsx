@@ -227,6 +227,27 @@ export function PresupuestoEditor() {
     }
   }, [store]);
 
+  // True solo si la selección actual cumple TODAS las reglas de unificación.
+  // Si es false el botón Unificar no se renderiza siquiera.
+  const canUnifySelection = useMemo(() => {
+    if (store.selectedIds.size < 2) return false;
+    const items = Array.from(store.selectedIds)
+      .map((id) => store.conceptos[id])
+      .filter(Boolean);
+    if (items.length < 2) return false;
+    if (items.some((i) => i.tipo === 'Capitulo')) return false;
+    const firstParent = items[0].parentId;
+    if (!items.every((i) => i.parentId === firstParent)) return false;
+    const ref = items[0];
+    return items.every(
+      (i) =>
+        i.descripcion === ref.descripcion &&
+        i.unidad === ref.unidad &&
+        i.precioInterno === ref.precioInterno &&
+        i.precioCliente === ref.precioCliente,
+    );
+  }, [store.selectedIds, store.conceptos]);
+
   const openCreateComponente = useCallback(() => {
     if (store.selectedIds.size < 2) return;
     setPendingCreateIds(Array.from(store.selectedIds));
@@ -598,6 +619,7 @@ export function PresupuestoEditor() {
         onCreateFolder={handleCreateFolder}
         onCreateComponente={openCreateComponente}
         onUnify={handleUnify}
+        canUnify={canUnifySelection}
         hasCapituloSelected={(() => {
           const selId = store.getSelectedCapituloId();
           if (!selId) return false;

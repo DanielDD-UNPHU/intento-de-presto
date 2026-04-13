@@ -20,12 +20,13 @@ interface Props {
   hasCapituloSelected: boolean;
   onCreateComponente: () => void;
   onUnify: () => void;
+  canUnify: boolean;
 }
 
 export function FloatingToolbar({
   selectedCount, onMoveUp, onMoveDown, onIndent, onOutdent, onDelete, onChangeTipo,
   onCopyAsComponent, onCopyAsIndependent, onCreateFolder, hasCapituloSelected,
-  onCreateComponente, onUnify,
+  onCreateComponente, onUnify, canUnify,
 }: Props) {
   const [showTipoMenu, setShowTipoMenu] = useState(false);
   const [showCopyMenu, setShowCopyMenu] = useState(false);
@@ -100,8 +101,8 @@ export function FloatingToolbar({
         </button>
       )}
 
-      {/* Unificar items idénticos — suma cantidades de items duplicados */}
-      {selectedCount > 1 && (
+      {/* Unificar items idénticos — solo aparece si la selección es válida */}
+      {canUnify && (
         <button
           onClick={onUnify}
           title="Unificar items idénticos (suma cantidades)"
