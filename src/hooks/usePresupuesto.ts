@@ -13,7 +13,7 @@ import {
   groupInstancesByAnchor,
   findInstanceAnchor,
 } from '../utils/componenteUtils';
-import { computeBC3LevelFromCodigo } from '../utils/capituloRoles';
+import { computeBC3LevelFromCodigo, getBC3Level, isBC3Ancestor } from '../utils/capituloRoles';
 
 const OVERRIDABLE_FIELDS: OverridableField[] = ['precioInterno', 'precioCliente', 'cantidad', 'descripcion', 'unidad'];
 
@@ -1181,6 +1181,33 @@ export function usePresupuesto() {
   const moveConceptoTo = useCallback((dragId: string, targetId: string | null, position: 'inside' | 'before' | 'after') => {
     if (dragId === targetId) return;
     if (!targetId) return;
+
+    // ── Safety net: validar jerarquía BC3 antes de mover ──
+    // Misma lógica que canRowDropOn del grid, replicada aquí para evitar
+    // que un move inválido se ejecute aunque la UI haya fallado.
+    const dragSnap = conceptosRef.current[dragId];
+    const targetSnap = conceptosRef.current[targetId];
+    if (dragSnap && targetSnap) {
+      const dragLevel = getBC3Level(dragSnap);
+      const targetLevel = getBC3Level(targetSnap);
+
+      // Drag es BC3 cap → reglas de jerarquía
+      if (dragLevel !== null && targetLevel !== null) {
+        if (position === 'inside') {
+          if (!isBC3Ancestor(targetSnap, dragSnap)) return;
+        } else if (targetLevel !== dragLevel) {
+          return;
+        }
+      }
+
+      // Drag es item → debe pertenecer a la familia del target BC3
+      if (dragLevel === null && dragSnap.tipo !== 'Capitulo' && targetLevel !== null) {
+        const itemCode = dragSnap.codigoBC3 || dragSnap.codigo;
+        if (!itemCode) return;
+        const targetCode = targetSnap.codigo.slice(0, -1);
+        if (!itemCode.startsWith(targetCode)) return;
+      }
+    }
 
     setConceptos(prev => {
       const next = { ...prev };
