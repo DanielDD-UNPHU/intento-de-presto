@@ -367,9 +367,9 @@ export function PresupuestoGrid({
       return;
     }
 
-    // Internal row move
+    // Internal row move — VALIDAR canRowDropOn antes de ejecutar
     const rowId = e.dataTransfer.getData('application/x-row-id');
-    if (rowId && targetId && rowId !== targetId && pos) {
+    if (rowId && targetId && rowId !== targetId && pos && canRowDropOn(targetId, pos)) {
       if (pos === 'inside') {
         onMoveRow(rowId, targetId, 'inside');
       } else if (pos === 'before') {
@@ -378,7 +378,7 @@ export function PresupuestoGrid({
         onMoveRow(rowId, targetId, 'after');
       }
     }
-  }, [onDropBC3, onMoveRow, onSetDropTarget, onSetDropPosition, dropPosition]);
+  }, [onDropBC3, onMoveRow, onSetDropTarget, onSetDropPosition, onSetBC3DragPayload, dropPosition, dropTargetId, canRowDropOn]);
 
   // Cell renderer
   const renderCell = (id: string, field: EditableField, extraClass: string = '') => {
@@ -585,7 +585,7 @@ export function PresupuestoGrid({
                 setDraggingRowId(id);
               }}
               onDragEnd={() => { setDraggingRowId(null); onSetDropTarget(null); onSetBC3DragPayload(null); }}
-              onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
+              onDragOver={e => { e.stopPropagation(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
               onDrop={e => { e.stopPropagation(); handleDrop(e, id); }}
               onContextMenu={e => { if (onContextMenuRow) { e.preventDefault(); onContextMenuRow(id, e); } }}
