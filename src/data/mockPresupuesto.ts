@@ -1,11 +1,17 @@
 import type { ConceptoPresupuesto } from '../types';
+import { computeBC3LevelFromCodigo } from '../utils/capituloRoles';
 
 function c(
   id: string, codigo: string, descripcion: string, tipo: ConceptoPresupuesto['tipo'],
   parentId: string | null, childrenIds: string[],
   unidad = '', cantidad = 0, precioRef = 0, precioInterno = 0, _precioCliente = 0
 ): Omit<ConceptoPresupuesto, 'nivel' | 'orden'> {
-  return { id, codigo, descripcion, tipo, unidad, cantidad, precioRef, precioInterno, precioCliente: precioRef, parentId, childrenIds };
+  const bc3Level = tipo === 'Capitulo' ? computeBC3LevelFromCodigo(codigo) : null;
+  return {
+    id, codigo, descripcion, tipo, unidad, cantidad, precioRef, precioInterno,
+    precioCliente: precioRef, parentId, childrenIds,
+    ...(bc3Level !== null ? { bc3Level } : {}),
+  };
 }
 
 export function createMockPresupuesto(): Record<string, ConceptoPresupuesto> {

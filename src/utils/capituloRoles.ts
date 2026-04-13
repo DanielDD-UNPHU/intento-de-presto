@@ -10,6 +10,59 @@ export function getCapituloRole(c: ConceptoPresupuesto): CapituloRole | null {
   return 'folder';
 }
 
+/**
+ * Deriva el nivel BC3 a partir del código FIEBDC-3:
+ *   A#      → 0 (categoría raíz, "abuelo")
+ *   A04#    → 1 (subcategoría, "padre")
+ *   A0402#  → 2 (subsubcategoría, "hijo")
+ *   otro    → null
+ */
+export function computeBC3LevelFromCodigo(codigo: string): 0 | 1 | 2 | null {
+  if (!codigo.endsWith('#')) return null;
+  const core = codigo.slice(0, -1);
+  if (core.length === 1) return 0;
+  if (core.length === 3) return 1;
+  if (core.length === 5) return 2;
+  return null;
+}
+
+/**
+ * Lee el nivel BC3 de un concepto. Prefiere el field explícito `bc3Level`
+ * guardado en el dato; si no existe (datos viejos), cae a la derivación por
+ * longitud del código.
+ *
+ * Dos caps con el mismo nivel son HERMANOS y no pueden anidarse entre sí.
+ */
+export function getBC3Level(c: ConceptoPresupuesto): 0 | 1 | 2 | null {
+  if (c.tipo !== 'Capitulo') return null;
+  if (c.bc3Level !== undefined) return c.bc3Level;
+  return computeBC3LevelFromCodigo(c.codigo);
+}
+
+/**
+ * True si `target` es un ancestro BC3 legítimo de `drag` — o sea, si el código
+ * del target (sin el #) es un prefijo ESTRICTO del código del drag (sin el #).
+ *
+ * Ejemplos válidos:
+ *   target A#     (A)     es ancestro de drag A04#  (A04)   → sí, "A" es prefijo de "A04"
+ *   target A04#   (A04)   es ancestro de drag A0402# (A0402)→ sí, "A04" es prefijo de "A0402"
+ *
+ * Ejemplos NO válidos:
+ *   target A05#   (A05)   vs drag A0402# (A0402) → "A05" NO es prefijo de "A0402"
+ *   target A05#   (A05)   vs drag A04#   (A04)   → "A05" NO es prefijo de "A04" + mismo nivel
+ *   target M#     (M)     vs drag A04#   (A04)   → "M" NO es prefijo de "A04" (otra familia)
+ *
+ * Esto asegura que un BC3 cap solo se anide dentro de su propio linaje (su
+ * "abuelo/padre" directo), nunca dentro de un hermano u otra familia.
+ */
+export function isBC3Ancestor(target: ConceptoPresupuesto, drag: ConceptoPresupuesto): boolean {
+  if (!target.codigo.endsWith('#') || !drag.codigo.endsWith('#')) return false;
+  const targetCode = target.codigo.slice(0, -1);
+  const dragCode = drag.codigo.slice(0, -1);
+  if (targetCode.length >= dragCode.length) return false;
+  return dragCode.startsWith(targetCode);
+}
+
 interface RoleConfig {
   label: string;
   short: string;

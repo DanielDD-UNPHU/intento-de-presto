@@ -39,6 +39,13 @@ export interface ConceptoPresupuesto {
   // Override tracking — stores ORIGINAL values. Current value on concept IS the override.
   overrides?: FieldOverrides;
 
+  // Nivel BC3 explícito (solo para Capitulos BC3):
+  //   0 = categoría raíz (A#)               — el "abuelo"
+  //   1 = subcategoría (A04# HORMIGON)     — el "padre"
+  //   2 = subsubcategoría (A0402# COLUMNAS) — el "hijo"
+  // undefined = no es BC3 cap (Nivel/Bloque/Folder custom/Item)
+  bc3Level?: 0 | 1 | 2;
+
   // Component system (legacy — a deprecar cuando el nuevo sistema esté verificado)
   componentSourceId?: string;   // This concept is an instance of that source
   isComponentSource?: boolean;  // This concept is a reusable template

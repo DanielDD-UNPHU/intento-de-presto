@@ -5,7 +5,7 @@ import { ComponenteChip } from './ComponenteChip';
 import { formatMoney } from '../utils/formatters';
 import { ChevronRight, ChevronDown, ClipboardPaste, Undo2, Link2, FolderPlus, Trash2, Plus } from 'lucide-react';
 import { highlightMatch } from '../utils/searchUtils';
-import { getCapituloRole, ROLE_CONFIG } from '../utils/capituloRoles';
+import { getCapituloRole, ROLE_CONFIG, getBC3Level, isBC3Ancestor } from '../utils/capituloRoles';
 
 interface Props {
   visibleIds: string[];
@@ -230,8 +230,8 @@ export function PresupuestoGrid({
     return !conceptos[id]?.parentId;
   }, [conceptos]);
 
-  // Check if a row drag can drop on a target
-  const canRowDropOn = useCallback((targetId: string): boolean => {
+  // Check if a row drag can drop on a target at the given position
+  const canRowDropOn = useCallback((targetId: string, position: 'before' | 'inside' | 'after'): boolean => {
     if (!draggingRowId) return false;
     if (draggingRowId === targetId) return false;
     const drag = conceptos[draggingRowId];
@@ -245,15 +245,41 @@ export function PresupuestoGrid({
       check = conceptos[check.parentId];
     }
 
-    // Reorder among siblings is always OK
-    if (target.parentId === drag.parentId) return true;
+    // Siblings del mismo parent: before/after siempre OK (reorder). Pero INSIDE
+    // sí necesita pasar por las reglas de jerarquía — no podemos permitir que
+    // un BC3 cap entre DENTRO de otro cap hermano (HORMIGON dentro de MAMPOSTERIA).
+    if (target.parentId === drag.parentId) {
+      if (position === 'before' || position === 'after') return true;
+      // Inside: cae a las reglas BC3 abajo
+    }
 
-    // Permitir drop sobre cualquier Capitulo: Nivel, Bloque, Folder custom, o
-    // cualquier BC3 cap (categoría A#, subcategoría A04#, subsubcategoría A0402#).
-    // El reorganizado de la cadena BC3 lo hace ensureBC3Chain en el hook.
-    if (target.tipo === 'Capitulo') return true;
+    // Target must be a Capitulo to receive a drop
+    if (target.tipo !== 'Capitulo') return false;
 
-    return false;
+    // Si el arrastrado es una BC3 cap, aplicar reglas de jerarquía BC3 por
+    // FAMILIA (no solo por nivel). Un BC3 cap solo puede anidarse dentro de su
+    // linaje natural: el target debe ser un ancestro BC3 legítimo (su código
+    // sin # debe ser prefijo estricto del código del drag sin #).
+    const dragLevel = getBC3Level(drag);
+    if (dragLevel !== null) {
+      const targetLevel = getBC3Level(target);
+      if (targetLevel !== null) {
+        if (position === 'inside') {
+          // Inside: solo si target es ancestro legítimo en la misma familia.
+          // Bloquea HORMIGON dentro de MAMPOSTERIA, A04# dentro de M01#, etc.
+          return isBC3Ancestor(target, drag);
+        }
+        // Before/after entre BC3 caps de distintos parents: exigimos mismo
+        // nivel (ya cubrimos el caso siblings-con-mismo-parent arriba con el
+        // early return). Cross-parent reorder a otra familia se bloquea.
+        return targetLevel === dragLevel;
+      }
+      // Target es Capitulo NO BC3 (folder/bloque/nivel) — siempre OK
+      return true;
+    }
+
+    // Arrastrado es item o cap no-BC3 (folder/bloque) — cualquier Capitulo OK
+    return true;
   }, [draggingRowId, conceptos]);
 
   // Drop handlers — supports BC3 items and internal row reordering
@@ -287,25 +313,25 @@ export function PresupuestoGrid({
       if (smartTarget !== dropTargetId) onSetDropTarget(smartTarget);
       onSetDropPosition('inside');
     } else if (isRow && targetId) {
-      if (canRowDropOn(targetId)) {
+      // Calcular posición ANTES del check, para que canRowDropOn pueda
+      // aplicar reglas distintas según inside vs before/after.
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const y = e.clientY - rect.top;
+      const target = conceptos[targetId];
+      let position: 'before' | 'inside' | 'after';
+      if (target?.tipo === 'Capitulo') {
+        if (y < rect.height * 0.3) position = 'before';
+        else if (y > rect.height * 0.7) position = 'after';
+        else position = 'inside';
+      } else {
+        position = y < rect.height / 2 ? 'before' : 'after';
+      }
+
+      if (canRowDropOn(targetId, position)) {
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         if (targetId !== dropTargetId) onSetDropTarget(targetId);
-
-        // Determine position based on cursor Y within the row
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        const target = conceptos[targetId];
-
-        if (target?.tipo === 'Capitulo') {
-          // For chapters: top third = before, middle = inside, bottom third = after
-          if (y < rect.height * 0.3) onSetDropPosition('before');
-          else if (y > rect.height * 0.7) onSetDropPosition('after');
-          else onSetDropPosition('inside');
-        } else {
-          // For items: top half = before, bottom half = after
-          onSetDropPosition(y < rect.height / 2 ? 'before' : 'after');
-        }
+        onSetDropPosition(position);
       } else {
         onSetDropTarget(null);
         onSetDropPosition(null);
@@ -507,31 +533,52 @@ export function PresupuestoGrid({
           return (
             <div
               key={id}
-              className={`col-span-full grid border-b transition-all duration-75 relative ${
+              className={`col-span-full grid border-b border-l-4 border-l-transparent transition-colors duration-75 relative ${
                 isInDropGroup
                   ? 'bg-blue-50/60'
                   : isSelected
-                    ? 'bg-blue-50/80 border-blue-100'
+                    ? 'bg-blue-50/80'
                     : isChapter
                       ? `${nivelBg} ${nivelBorder} border-slate-100 ${nivelHover}`
                       : `${nivelBg} ${nivelBorder} border-slate-100/60 ${nivelHover}`
               }`}
               style={{
                 gridTemplateColumns: 'subgrid', height: 34,
-                ...(isInDropGroup ? {
-                  borderLeft: '3px solid #3b82f6',
-                  borderRight: '3px solid #3b82f6',
-                  borderTop: isFirstInDropGroup ? '3px solid #3b82f6' : undefined,
-                  borderBottom: isLastInDropGroup ? '3px solid #3b82f6' : undefined,
-                  borderRadius: isFirstInDropGroup && isLastInDropGroup ? '8px' : isFirstInDropGroup ? '8px 8px 0 0' : isLastInDropGroup ? '0 0 8px 8px' : undefined,
-                } : {}),
+                // Todo el visual feedback del drop/selection/component va por
+                // box-shadow — puramente visual, NO afecta layout del subgrid.
+                boxShadow: [
+                  // Inside drop highlight (outline-style)
+                  isInDropGroup ? 'inset 0 0 0 3px #3b82f6' : '',
+                  // Before drop indicator (línea arriba)
+                  isDropTarget && dropPosition === 'before' ? 'inset 0 3px 0 #3b82f6' : '',
+                  // After drop indicator (línea abajo)
+                  isDropTarget && dropPosition === 'after' ? 'inset 0 -3px 0 #3b82f6' : '',
+                  // Selection stripe (línea izquierda)
+                  isSelected ? 'inset 3px 0 0 #3b82f6' : '',
+                  // Component source stripe (derecha violeta — legacy)
+                  isComponentSource ? 'inset -3px 0 0 #8b5cf6' : '',
+                  // Component instance stripe (derecha cyan — legacy)
+                  isComponentInstance ? 'inset -3px 0 0 #22d3ee' : '',
+                ].filter(Boolean).join(', ') || undefined,
+                borderRadius: isInDropGroup
+                  ? (isFirstInDropGroup && isLastInDropGroup ? '8px' : isFirstInDropGroup ? '8px 8px 0 0' : isLastInDropGroup ? '0 0 8px 8px' : undefined)
+                  : undefined,
               }}
-              draggable={!isChapter}
-              onDragStart={!isChapter ? e => {
+              draggable
+              onDragStart={e => {
                 e.dataTransfer.setData('application/x-row-id', id);
                 e.dataTransfer.effectAllowed = 'move';
+                // Drag image custom: una miniatura limpia con el descripcion
+                // para que el browser no use el row entero como ghost (que
+                // causa artefactos visuales al pasar sobre otras filas).
+                const dragImg = document.createElement('div');
+                dragImg.textContent = c.descripcion || c.codigo || '(sin nombre)';
+                dragImg.style.cssText = 'position:absolute;top:-9999px;left:-9999px;padding:6px 10px;background:#0f172a;color:#fff;font-size:11px;font-weight:600;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,0.3);white-space:nowrap;';
+                document.body.appendChild(dragImg);
+                e.dataTransfer.setDragImage(dragImg, 0, 0);
+                setTimeout(() => document.body.removeChild(dragImg), 0);
                 setDraggingRowId(id);
-              } : undefined}
+              }}
               onDragEnd={() => { setDraggingRowId(null); onSetDropTarget(null); onSetBC3DragPayload(null); }}
               onDragOver={e => { e.stopPropagation(); e.preventDefault(); handleDragOver(e, id); }}
               onDragLeave={handleDragLeave}
@@ -542,28 +589,29 @@ export function PresupuestoGrid({
                 const target = e.target as HTMLElement;
                 if (target.closest('[data-row-select-skip="true"]')) return;
                 if (target.closest('button, input, textarea, [role="button"]')) return;
-                handleRowMouseDown(idx, e);
+                // NO llamamos preventDefault acá porque el row de Capitulo es draggable
+                // y preventDefault rompe el inicio del drag nativo del browser.
+                if (e.shiftKey && selectedIds.size > 0) {
+                  const allSelectedIndices = visibleIds.map((vid, i) => selectedIds.has(vid) ? i : -1).filter(i => i >= 0);
+                  const minSel = Math.min(...allSelectedIndices);
+                  const start = Math.min(minSel, idx);
+                  const end = Math.max(Math.max(...allSelectedIndices), idx);
+                  const newSet = new Set<string>();
+                  for (let i = start; i <= end; i++) newSet.add(visibleIds[i]);
+                  onSelect(newSet);
+                } else if (e.metaKey || e.ctrlKey) {
+                  const newSet = new Set(selectedIds);
+                  newSet.has(visibleIds[idx]) ? newSet.delete(visibleIds[idx]) : newSet.add(visibleIds[idx]);
+                  onSelect(newSet);
+                } else {
+                  onSelect(new Set([visibleIds[idx]]));
+                }
               } : undefined}
               onMouseEnter={isChapter ? () => handleRowMouseEnter(idx) : undefined}
             >
-              {/* Drop indicator line — top, bottom, or full highlight for inside */}
-              {isDropTarget && dropPosition === 'before' && (
-                <div className="absolute -top-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]">
-                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow bg-blue-500" />
-                </div>
-              )}
-              {isDropTarget && dropPosition === 'after' && (
-                <div className="absolute -bottom-[1.5px] left-0 right-0 h-[3px] z-20 pointer-events-none rounded-full bg-blue-500 shadow-[0_0_6px_rgba(37,99,235,0.5)]">
-                  <div className="absolute -left-1 -top-[3px] w-[9px] h-[9px] rounded-full border-2 border-white shadow bg-blue-500" />
-                </div>
-              )}
-
-              {/* Selection stripe */}
-              {isSelected && <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-blue-500 rounded-r-sm" />}
-
-              {/* Component indicator stripe */}
-              {isComponentSource && <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-violet-500 rounded-l-sm" />}
-              {isComponentInstance && <div className="absolute right-0 top-0 bottom-0 w-[3px] bg-cyan-400 rounded-l-sm" />}
+              {/* Todos los indicadores visuales (drop, selection, componentes)
+                  ahora se pintan via box-shadow en el row mismo. No hay divs
+                  hijos que puedan ser tratados como grid items. */}
 
               {/* Row number — color matches semantic role */}
               <div

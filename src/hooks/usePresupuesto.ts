@@ -13,6 +13,7 @@ import {
   groupInstancesByAnchor,
   findInstanceAnchor,
 } from '../utils/componenteUtils';
+import { computeBC3LevelFromCodigo } from '../utils/capituloRoles';
 
 const OVERRIDABLE_FIELDS: OverridableField[] = ['precioInterno', 'precioCliente', 'cantidad', 'descripcion', 'unidad'];
 
@@ -403,11 +404,13 @@ export function usePresupuesto() {
       const id = uuidv4();
       const parent = under ? next[under] : null;
       const nivel = parent ? parent.nivel + 1 : 0;
+      const level = computeBC3LevelFromCodigo(code);
       next[id] = {
         id, codigo: code, descripcion: name,
         tipo: 'Capitulo' as const, unidad: '', cantidad: 0,
         precioRef: 0, precioInterno: 0, precioCliente: 0,
         parentId: under, childrenIds: [], nivel, orden: siblings.length,
+        ...(level !== null ? { bc3Level: level } : {}),
       };
       if (under && next[under]) {
         next[under] = { ...next[under], childrenIds: [...next[under].childrenIds, id] };
@@ -965,6 +968,7 @@ export function usePresupuesto() {
             const newCapId = uuidv4();
             const parentConcepto = next[currentParent];
             const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            const capLevel = computeBC3LevelFromCodigo(cap.codigo);
             next[newCapId] = {
               id: newCapId,
               codigo: cap.codigo,
@@ -979,6 +983,7 @@ export function usePresupuesto() {
               childrenIds: [],
               nivel,
               orden: siblings.length,
+              ...(capLevel !== null ? { bc3Level: capLevel } : {}),
             };
             next[currentParent] = {
               ...next[currentParent],
@@ -1060,6 +1065,7 @@ export function usePresupuesto() {
             const newCapId = uuidv4();
             const parentConcepto = next[currentParent];
             const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            const capLevel = computeBC3LevelFromCodigo(cap.codigo);
             next[newCapId] = {
               id: newCapId,
               codigo: cap.codigo,
@@ -1074,6 +1080,7 @@ export function usePresupuesto() {
               childrenIds: [],
               nivel,
               orden: siblings.length,
+              ...(capLevel !== null ? { bc3Level: capLevel } : {}),
             };
             next[currentParent] = {
               ...next[currentParent],
@@ -1184,11 +1191,13 @@ export function usePresupuesto() {
             const newCapId = uuidv4();
             const parentConcepto = next[currentParent];
             const nivel = parentConcepto ? parentConcepto.nivel + 1 : 0;
+            const capLevel = computeBC3LevelFromCodigo(cap.codigo);
             next[newCapId] = {
               id: newCapId, codigo: cap.codigo, descripcion: cap.descripcion,
               tipo: 'Capitulo', unidad: '', cantidad: 0,
               precioRef: 0, precioInterno: 0, precioCliente: 0,
               parentId: currentParent, childrenIds: [], nivel, orden: existingChildren.length,
+              ...(capLevel !== null ? { bc3Level: capLevel } : {}),
             };
             next[currentParent] = {
               ...next[currentParent],
@@ -1211,8 +1220,13 @@ export function usePresupuesto() {
       if (sameParent) {
         // Simple reorder within same parent
         finalParentId = position === 'inside' ? targetId : next[targetId]!.parentId!;
+      } else if (next[destParentId]?.codigo.endsWith('#')) {
+        // El destino ES una BC3 cap explícita (A#, A04#, A0402#) —
+        // respetamos literalmente dónde soltó el usuario. No descendemos a
+        // subcategorías vía ensureBC3Chain. El item queda directamente ahí.
+        finalParentId = destParentId;
       } else {
-        // Moving to different location — ensure ancestor chain
+        // Destino custom (Nivel, Bloque, Folder) — recrear cadena BC3 adentro.
         finalParentId = ensureBC3Chain(destParentId);
       }
 
